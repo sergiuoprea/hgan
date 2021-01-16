@@ -3,6 +3,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from PIL import Image
 import torch.utils.data
+from torch.utils.data import Subset
 from datasets.utils import calculate_mean_and_std, Denormalize
 
 from argparse import ArgumentParser
@@ -73,6 +74,7 @@ class SynthHandsDataModule(pl.LightningDataModule):
         parser.add_argument('--sh_shuffle', type=bool, default=True)
         parser.add_argument('--sh_with_objects', type=bool, default=False)
         parser.add_argument('--sh_crop_size', type=int, default=256)
+        parser.add_argument('--sh_valid_size', type=int, default=1000)
 
         return parser
 
@@ -123,7 +125,13 @@ class SynthHandsDataModule(pl.LightningDataModule):
         ops['mask'] = transforms.Compose([transforms.CenterCrop(self.hparams.sh_crop_size),
                                        transforms.ToTensor()])
 
-        self.datasets['train'] = SynthHandsDataset(self.data, ops)
+        #Train/Validation split
+        indices = list(range(len(self.data)))
+        valid_dataset = Subset(self.data, indices[:self.hparams.sh_valid_size])
+        train_dataset = Subset(self.data, indices[self.hparams.sh_valid_size:])
+
+        self.datasets['train'] = SynthHandsDataset(train_dataset, ops)
+        self.datasets['valid'] = SynthHandsDataset(valid_dataset, ops)
         self.datasets['mean_std'] = SynthHandsDataset(random.sample(self.data, 20000), transforms.ToTensor())
 
     def get_dataset(self, mode='train'):
