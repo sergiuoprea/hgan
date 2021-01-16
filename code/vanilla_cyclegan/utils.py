@@ -8,6 +8,7 @@ import random
 import numpy as np
 import os
 from PIL import Image
+from torch.nn import functional as F
 
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, ksize, stride=1, padding=0,
@@ -72,51 +73,7 @@ class ResidualBlock(nn.Module):
     def forward(self, inp):
         """ Forward function with skip connections """
         return inp + self.module(inp)
-
-def get_norm_layer(norm_type='batch'):
-    if norm_type == 'batch':
-        norm_layer = functools.partial(nn.BatchNorm2d, affine=True, track_running_stats=True)
-    elif norm_type == 'instance':
-        norm_layer = functools.partial(nn.InstanceNorm2d, affine=False, track_running_stats=False)
-    else:
-        raise NotImplementedError(f'Normalization layer {norm_layer} is not found!')
-
-    return norm_layer
-
-def init_weights(net, init_type='xavier', init_gain=0.02):
-    """Initialize network weights.
-    Parameters:
-        net (network)   -- network to be initialized
-        init_type (str) -- the name of an initialization method: normal | xavier
-                           | kaiming | orthogonal
-        init_gain (float)    -- scaling factor for normal, xavier and orthogonal.
-    Function extracted from https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/
-    """
-    def init_func(m):  # define the initialization function
-        classname = m.__class__.__name__
-        if hasattr(m, 'weight') and (classname.find('Conv') != -1 or
-                                     classname.find('Linear') != -1):
-            if init_type == 'normal':
-                init.normal_(m.weight.data, 0.0, init_gain)
-            elif init_type == 'xavier':
-                init.xavier_normal_(m.weight.data, gain=init_gain)
-            elif init_type == 'kaiming':
-                init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
-            elif init_type == 'orthogonal':
-                init.orthogonal_(m.weight.data, gain=init_gain)
-            else:
-                raise NotImplementedError('initialization method [%s] \
-                                           is not implemented' % init_type)
-            if hasattr(m, 'bias') and m.bias is not None:
-                init.constant_(m.bias.data, 0.0)
-        # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
-        elif classname.find('BatchNorm2d') != -1:
-            init.normal_(m.weight.data, 1.0, init_gain)
-            init.constant_(m.bias.data, 0.0)
-
-    print('initialize network with %s' % init_type)
-    net.apply(init_func)  # apply the initialization function <init_func>
-
+    
 class ImagePool():
     """This class implements an image buffer that stores previously generated images.
     This buffer enables us to update discriminators using a history of generated images
@@ -163,6 +120,50 @@ class ImagePool():
         return_images = torch.cat(return_images, 0)   # collect all the images and return
         return return_images
 
+def get_norm_layer(norm_type='batch'):
+    if norm_type == 'batch':
+        norm_layer = functools.partial(nn.BatchNorm2d, affine=True, track_running_stats=True)
+    elif norm_type == 'instance':
+        norm_layer = functools.partial(nn.InstanceNorm2d, affine=False, track_running_stats=False)
+    else:
+        raise NotImplementedError(f'Normalization layer {norm_layer} is not found!')
+
+    return norm_layer
+
+def init_weights(net, init_type='xavier', init_gain=0.02):
+    """Initialize network weights.
+    Parameters:
+        net (network)   -- network to be initialized
+        init_type (str) -- the name of an initialization method: normal | xavier
+                           | kaiming | orthogonal
+        init_gain (float)    -- scaling factor for normal, xavier and orthogonal.
+    Function extracted from https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/
+    """
+    def init_func(m):  # define the initialization function
+        classname = m.__class__.__name__
+        if hasattr(m, 'weight') and (classname.find('Conv') != -1 or
+                                     classname.find('Linear') != -1):
+            if init_type == 'normal':
+                init.normal_(m.weight.data, 0.0, init_gain)
+            elif init_type == 'xavier':
+                init.xavier_normal_(m.weight.data, gain=init_gain)
+            elif init_type == 'kaiming':
+                init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
+            elif init_type == 'orthogonal':
+                init.orthogonal_(m.weight.data, gain=init_gain)
+            else:
+                raise NotImplementedError('initialization method [%s] \
+                                           is not implemented' % init_type)
+            if hasattr(m, 'bias') and m.bias is not None:
+                init.constant_(m.bias.data, 0.0)
+        # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
+        elif classname.find('BatchNorm2d') != -1:
+            init.normal_(m.weight.data, 1.0, init_gain)
+            init.constant_(m.bias.data, 0.0)
+
+    print('initialize network with %s' % init_type)
+    net.apply(init_func)  # apply the initialization function <init_func>
+
 def set_mode(nets, mode='train'):
     for _, net in nets.items():
         if mode == 'train':
@@ -174,14 +175,10 @@ def set_mode(nets, mode='train'):
 
     print(f'Models {nets.keys()} are now in {mode} mode.!')
 
-def set_grad(nets, requires_grad=False):
+def set_requires_grad(nets, requires_grad=False):
     for net in nets:
         for param in net.parameters():
             param.requires_grad = requires_grad
-
-def denormalize(x):
-    out = (x + 1) / 2
-    return out.clamp_(0, 1)
 
 def save_model(nets, optimizers, tag, dir_path):
     _out_path = os.path.join(dir_path, "chk_" + tag + '.pkl')
@@ -212,6 +209,18 @@ def load_model(nets, optimizers, start_epoch, start_iter, dir_path, device):
 
     print(f'Models {nets.keys()} and optimizers {optimizers.keys()} were initilized successfully with weights {_chk_file}.')
 
+def get_mse_loss(output, label):
+    if label.lower() == 'real':
+        target = torch.ones_like(output)
+    else:
+        target = torch.zeros_like(output)
+
+    return F.mse_loss(output, target)
+
+"""def denormalize(x):
+    out = (x + 1) / 2
+    return out.clamp_(0, 1)
+
 def save_imgs(images, out_dir):
     to_pil = transforms.ToPILImage()
     for i, image in enumerate(images):
@@ -219,4 +228,4 @@ def save_imgs(images, out_dir):
         _pil_img = to_pil(denormalize(image.detach().cpu()))#Image.fromarray(np.uint8(denormalize(image)))
         _pil_img.save(_filename, "JPEG")
         
-    print(f'{len(images)} properly saved to {out_dir}!')
+    print(f'{len(images)} properly saved to {out_dir}!')"""
