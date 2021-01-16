@@ -3,18 +3,18 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from PIL import Image
 import torch.utils.data
-from datasets.utils import calculate_mean_and_std
+from datasets.utils import calculate_mean_and_std, Denormalize
 
 from argparse import ArgumentParser
 import json
 import os
 import random
+import numpy as np
 
 class RealHandsDataset(torch.utils.data.Dataset):
     def __init__(self, data, ops):
         self.data = data
         self.ops = ops
-        self.to_tensor = transforms.ToTensor()
 
     def __getitem__(self, idx):
         _out = {}
@@ -22,6 +22,14 @@ class RealHandsDataset(torch.utils.data.Dataset):
 
         _rgb = Image.open(_path[0])
         _mask = Image.open(_path[1])
+
+        # Setting white background
+        _rgb = np.array(_rgb)
+        _mask = np.array(_mask)
+        _rgb[_mask < 10] = 255
+
+        _rgb = Image.fromarray(_rgb)
+        _mask = Image.fromarray(_mask)
 
         if self.ops:
             _rgb = self.ops['rgb'](_rgb)
@@ -36,14 +44,20 @@ class RealHandsDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.data)
 
-
 class RealHandsDataModule(pl.LightningDataModule):
     def __init__(self, hparams):
         super().__init__()
         self.hparams = hparams
         self.data = [] # absolute paths to images
         self.datasets = {}
-        self.ops = {}
+
+        # Calculated from the data
+        #self.mean = [-0.7522, 0.1588, -0.1367]
+        #self.std = [0.4952, 0.1567, 0.2317]
+
+        # To normalize in range [-1, 1]
+        self.mean = [0.5, 0.5, 0.5]
+        self.std = [0.5, 0.5, 0.5]
 
     @staticmethod
     def add_model_specific_args(parent_parser):
@@ -51,10 +65,12 @@ class RealHandsDataModule(pl.LightningDataModule):
         parser.add_argument('--rh_path', type=str, default='/src/datasets/realhands', help='path to the RealHands dataset root folder.')
         parser.add_argument('--rh_json', type=bool, default=False, help='if true: gather data paths of RealHands dataset to a json file, pairing the rgb images with their respective masks.')
         parser.add_argument('--rh_mean_std', type=bool, default=False, help='if true: calculate the mean and standard deviation for the RealHands dataset.')
+        parser.add_argument('--rh_shuffle', type=bool, default=True)
+        parser.add_argument('--rh_crop_size', type=int, default=256)
 
         return parser
 
-    def prepare_data(self, shuffle=True):
+    def prepare_data(self):
         """
         If get_jason = True -> The paths will be stored in a JSON file for speedup.
         Paths will be stored in a JSON file for performance issues. I
@@ -86,7 +102,7 @@ class RealHandsDataModule(pl.LightningDataModule):
 
                 self.data.extend(_buffer)
 
-            if shuffle:
+            if self.hparams.rh_shuffle:
                 random.shuffle(self.data)
 
             with open(os.path.join(self.hparams.rh_path, 'realhands.json'), 'w') as _file:
@@ -96,26 +112,25 @@ class RealHandsDataModule(pl.LightningDataModule):
 
         if self.hparams.rh_mean_std:
             print("Computing the mean and std for the RealHands dataset...")
-            dataset = RealHandsDataset(self.data, transforms.ToTensor())
-            dataloader = DataLoader(dataset=dataset, batch_size=64)
+            dataloader = DataLoader(dataset=self.datasets['mean_std'], batch_size=64)
             mean, std = calculate_mean_and_std(dataloader)
 
     def setup(self):
-        self.ops['rgb'] = transforms.Compose([transforms.CenterCrop(300),
-                                      transforms.Normalize(mean=[-0.7522, 0.1588, -0.1367],
-                                                           std =[0.4952, 0.1567, 0.2317]),
-                                      transforms.ToTensor()])
+        ops = {}
+        ops['rgb'] = transforms.Compose([transforms.CenterCrop(self.hparams.rh_crop_size),
+                                      transforms.ToTensor(),
+                                      transforms.Normalize(mean= self.mean,
+                                                           std = self.std)])
 
-        self.ops['mask'] = transforms.Compose([transforms.CenterCrop(300),
+        ops['mask'] = transforms.Compose([transforms.CenterCrop(self.hparams.rh_crop_size),
                                        transforms.ToTensor()])
 
+        self.datasets['train'] = RealHandsDataset(self.data, ops)
+        self.datasets['mean_std'] = RealHandsDataset(self.data, transforms.ToTensor())
         #ToDo make the splits into training, validation, test sets if necessary
 
-    def train_dataloader(self):
-        raise NotImplementedError()
+    def get_dataset(self, mode='train'):
+        return self.datasets[mode]
 
-    def val_dataloader(self):
-        raise NotImplementedError()
-
-    def test_dataloader(self):
-        raise NotImplementedError()
+    def get_denormalizer(self):
+        return Denormalize(self.mean, self.std)
