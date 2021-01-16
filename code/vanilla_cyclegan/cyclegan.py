@@ -112,11 +112,14 @@ class CycleGAN(pl.LightningModule):
         gen_losses['cycleAB'] = F.l1_loss(recA, realA) * self.hparams.lambda_a
         gen_losses['cycleBA'] = F.l1_loss(recB, realB) * self.hparams.lambda_b
 
+        # Total generator loss
+        gen_losses['genTotal'] = sum(gen_losses.values())
+
         # Tensorboard Logging
         self.log_images(realA, realB)
         self.log_losses(gen_losses)
 
-        return sum(gen_losses.values())
+        return gen_losses['genTotal'] 
 
     def discriminator_pass(self, realA, realB):
         dis_losses = {}
@@ -130,10 +133,13 @@ class CycleGAN(pl.LightningModule):
         dis_losses['fakeAd'] = get_mse_loss(self.models['dA'](fakeA.detach()), 'fake')
         dis_losses['fakeBd'] = get_mse_loss(self.models['dB'](fakeB.detach()), 'fake')
 
+        # Total discriminators loss
+        dis_losses['disTotal'] = sum(dis_losses.values()) * 0.5
+
         #Tensorboard logging
         self.log_losses(dis_losses)
 
-        return sum(dis_losses.values()) * 0.5
+        return dis_losses['disTotal']
 
     def training_step(self, batch, batch_idx, optimizer_idx):
         domainA, domainB = batch
