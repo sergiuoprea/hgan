@@ -133,7 +133,7 @@ class CycleGAN(pl.LightningModule):
         #Tensorboard logging
         self.log_losses(dis_losses)
 
-        return sum(dis_losses.items()) * 0.5
+        return sum(dis_losses.values()) * 0.5
 
     def training_step(self, batch, batch_idx, optimizer_idx):
         domainA, domainB = batch
