@@ -86,6 +86,7 @@ class CycleGAN(pl.LightningModule):
         parser.add_argument('--masked', type=bool, default=True)
         parser.add_argument('--fid_dims', type=int, default=2048)
         parser.add_argument('--perceptual', type=float, default=0.25)
+        parser.add_argument('--log_freq', type=int, default=25)
 
         return parser
 
@@ -148,8 +149,10 @@ class CycleGAN(pl.LightningModule):
         _losses['genTotal'] = sum(_losses.values())
 
         # Logging
-        self.log_images(realA, realB, maskA, maskB)
-        self.log_losses(_losses)
+        if self.trainer.global_step % self.hparams.log_freq == 0: # Log images every log_freq steps
+            self.log_images(realA, realB, maskA, maskB)
+        
+        self.log_losses(_losses) # Log losses each training step
 
         return _losses['genTotal']
 
@@ -161,7 +164,7 @@ class CycleGAN(pl.LightningModule):
         _losses['tot_'+net] = (_losses['real_'+net] + _losses['fake_'+net]) * 0.5
 
         # Logging
-        self.log_losses(_losses)
+        self.log_losses(_losses) # Log losses each trainings step
 
         return _losses['tot_'+net]
 
@@ -237,5 +240,4 @@ class ValidationCallback(Callback):
     def on_validation_end(self, trainer, pl_module):
         fid_score = fid(pl_module.inception_real.cpu().data.numpy(),
                         pl_module.inception_gen.cpu().data.numpy())
-        print(fid_score)
         trainer.logger.experiment.log_metric(log_name = 'FID', x = fid_score)
