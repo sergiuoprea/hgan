@@ -3,7 +3,7 @@ from vanilla_cyclegan.cyclegan import CycleGAN
 from vanilla_cyclegan.cyclegan import ValidationCallback
 from pytorch_lightning.loggers.neptune import NeptuneLogger
 import neptune_cfg
-from datasets.dataloader import PairedDataModule, update_dataset_specific_args
+from datasets.dataloader import MultipleDataModule
 from datasets.synthhands import SynthHandsDataModule
 
 from argparse import ArgumentParser
@@ -13,8 +13,7 @@ DATASETS = ["real_hands", "synth_hands"]
 parser = ArgumentParser()
 
 if __name__ == '__main__':
-    parser = update_dataset_specific_args(DATASETS, parser)
-    parser = PairedDataModule.add_model_specific_args(parser)
+    parser = MultipleDataModule.add_model_specific_args(parser, DATASETS)
     parser = CycleGAN.add_model_specific_args(parser)
     args = parser.parse_args()
 
@@ -22,7 +21,7 @@ if __name__ == '__main__':
     logger = NeptuneLogger(api_key=neptune_cfg.key, project_name=neptune_cfg.project, params=vars(args))
 
     # Datamodule
-    dm = PairedDataModule(DATASETS, args)
+    dm = MultipleDataModule(DATASETS, args)
     dm.prepare_data()
     dm.setup()
 
@@ -37,7 +36,7 @@ if __name__ == '__main__':
                          deterministic=True, callbacks=[ValidationCallback()],
                          limit_val_batches=100, limit_train_batches=4000)
 
-    # Train the model
+    # Train the mode
     trainer.fit(net, dm)
 
     # Stop Neptune logging
