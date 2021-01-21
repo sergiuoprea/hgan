@@ -15,10 +15,8 @@ class ConvBlock(nn.Module):
                  norm_layer=None, act_layer=None):
         super(ConvBlock, self).__init__()
 
-        layer_list = []
-
-        layer_list.append(nn.Conv2d(in_channels, out_channels, kernel_size=ksize,
-                                    stride=stride, padding=padding))
+        layer_list = [nn.Conv2d(in_channels, out_channels, kernel_size=ksize,
+                                stride=stride, padding=padding)]
 
         if norm_layer:
             layer_list.append(norm_layer(out_channels))
@@ -37,11 +35,9 @@ class TransConvBlock(nn.Module):
                  output_padding=0, norm_layer=None, act_layer=None):
         super(TransConvBlock, self).__init__()
 
-        layer_list = []
-
-        layer_list.append(nn.ConvTranspose2d(in_channels, out_channels, kernel_size=ksize,
-                                             stride=stride, padding=padding,
-                                             output_padding=output_padding))
+        layer_list = [nn.ConvTranspose2d(in_channels, out_channels, kernel_size=ksize,
+                                         stride=stride, padding=padding,
+                                         output_padding=output_padding)]
         if norm_layer:
             layer_list.append(norm_layer(out_channels))
 
@@ -55,18 +51,28 @@ class TransConvBlock(nn.Module):
         return self.module(inp)
 
 class ResidualBlock(nn.Module):
-    def __init__(self, channels, norm_layer=None, use_dropout=False):
+    """
+                        Defines a ResnetBlock
+    X ------------------------identity------------------------
+    |-- Convolution -- Norm -- ReLU -- Convolution -- Norm --|
+
+    Parameters:
+        in_ch: Number of input channels
+        norm_layer: Batch or Instance normalization
+        use_dropout: If set to True, activations will be 0'ed with a probability of 0.5 by default
+    """
+
+    def __init__(self, in_ch, norm_layer=None, use_dropout=False):
         super(ResidualBlock, self).__init__()
-        layer_list = []
-        layer_list += [nn.ReflectionPad2d(1),
-                       ConvBlock(channels, channels, ksize=3, norm_layer=norm_layer,
-                                 act_layer=nn.ReLU(True))]
+        layer_list = [nn.ReflectionPad2d(1),
+                      ConvBlock(in_ch, in_ch, ksize=3, stride=1, norm_layer=norm_layer,
+                                act_layer=nn.ReLU(True))]
 
         if use_dropout:
             layer_list += [nn.Dropout(0.5)]
 
         layer_list += [nn.ReflectionPad2d(1),
-                       ConvBlock(channels, channels, ksize=3, norm_layer=norm_layer)]
+                       ConvBlock(in_ch, in_ch, ksize=3, stride=1, norm_layer=norm_layer)]
 
         self.module = nn.Sequential(*layer_list)
 
@@ -74,24 +80,30 @@ class ResidualBlock(nn.Module):
         """ Forward function with skip connections """
         return inp + self.module(inp)
     
-class ImagePool():
-    """This class implements an image buffer that stores previously generated images.
-    This buffer enables us to update discriminators using a history of generated images
-    rather than the ones produced by the latest generators.
+class ImagePool:
+    """
+    This class implements an image buffer that stores previously generated images!
+    This enables to update the discriminators using a buffer of generated images rather
+    than the latest one produced by the generator.
     """
 
-    def __init__(self, pool_size):
-        """Initialize the ImagePool class
+    def __init__(self, pool_size: int = 50):
+        """
         Parameters:
-            pool_size (int) -- the size of image buffer, if pool_size=0, no buffer will be created
+            pool_size: size of the buffer, i.e. max number of images stored in the buffer.
+                       If pool_size = 0 no buffer is created.
         """
         self.pool_size = pool_size
-        if self.pool_size > 0:  # create an empty pool
-            self.num_imgs = 0
+
+        # Creating and empty pool
+        if self.pool_size > 0:
             self.images = []
+            self.num_imgs = 0
 
     def query(self, images):
-        """Return an image from the pool.
+        """Return a batch of images from the pool after adding the current
+        images to the buffer.
+
         Parameters:
             images: the latest generated images from the generator
         Returns images from the buffer.
@@ -99,26 +111,84 @@ class ImagePool():
         By 50/100, the buffer will return images previously stored in the buffer,
         and insert the current images to the buffer.
         """
-        if self.pool_size == 0:  # if the buffer size is 0, do nothing
+        if self.pool_size == 0: # No buffer, so return the input batch
             return images
+
         return_images = []
         for image in images:
-            image = torch.unsqueeze(image.data, 0)
-            if self.num_imgs < self.pool_size:   # if the buffer is not full; keep inserting current images to the buffer
+            image = torch.unsqueeze(image, 0)
+
+            # If the buffer is not full; keep inserting current images to the buffer
+            if self.num_imgs < self.pool_size:
                 self.num_imgs = self.num_imgs + 1
                 self.images.append(image)
                 return_images.append(image)
             else:
-                p = random.uniform(0, 1)
-                if p > 0.5:  # by 50% chance, the buffer will return a previously stored image, and insert the current image into the buffer
-                    random_id = random.randint(0, self.pool_size - 1)  # randint is inclusive
+                # 50% chance to return an image from the buffer, 
+                # previously swapping it with the current image
+                if random.uniform(0, 1) > 0.5:
+                    random_id = random.randint(0, self.pool_size - 1)
                     tmp = self.images[random_id].clone()
                     self.images[random_id] = image
                     return_images.append(tmp)
-                else:       # by another 50% chance, the buffer will return the current image
+                else: # by another 50% chance, the buffer will return the current image
                     return_images.append(image)
-        return_images = torch.cat(return_images, 0)   # collect all the images and return
-        return return_images
+
+        return torch.cat(return_images, 0)
+
+class Initializer:
+    """
+    To initialize network weights.
+    """
+
+    def __init__(self, init_type: str = 'normal', init_gain: float = 0.02):
+        """
+        Initialize the weights of the network.
+
+        Parameters:
+            init_type: Initialization method: normal | xavier | kaiming | orthogonal
+            init_gain: Scaling factor
+        """
+
+        self.init_type = init_type
+        self.init_gain = init_gain
+
+    def init_module(self, m):
+        cls_name = m.__class__.__name__
+        if hasattr(m, 'weight') and (cls_name.find('Conv') != -1 or cls_name.find('Linear') != -1):
+
+            if   self.init_type == 'kaiming':
+                nn.init.kaiming_normal_(m.weight.data, a = 0, mode = 'fan_in')
+            elif self.init_type == 'xavier' :
+                nn.init.xavier_normal_ (m.weight.data,  gain = self.init_gain)
+            elif self.init_type == 'normal' :
+                nn.init.normal_(m.weight.data, mean = 0, std = self.init_gain)
+            else: raise ValueError('Initialization not found!!')
+
+            if m.bias is not None:
+                nn.init.constant_(m.bias.data, val = 0)
+
+        if hasattr(m, 'weight') and cls_name.find('BatchNorm2d') != -1:
+            nn.init.normal_(m.weight.data, mean = 1.0, std = self.init_gain)
+            nn.init.constant_(m.bias.data, val = 0)
+
+    def __call__(self, net):
+        net.apply(self.init_module)
+        return net
+
+def set_requires_grad(nets, requires_grad: bool = False):
+    """
+    Set requires_grad to False for all the networks in the provided list to
+    avoid unnecessary computations.
+
+    Parameters:
+        nets (list): a list of networks
+        requires_grad (bool): whether the networks require gradients or not
+    """
+    if not isinstance(nets, list): nets = [nets]
+    for net in nets:
+        for param in net.parameters():
+            param.requires_grad = requires_grad
 
 def get_norm_layer(norm_type='batch'):
     if norm_type == 'batch':
@@ -130,40 +200,6 @@ def get_norm_layer(norm_type='batch'):
 
     return norm_layer
 
-def init_weights(net, init_type='xavier', init_gain=0.02):
-    """Initialize network weights.
-    Parameters:
-        net (network)   -- network to be initialized
-        init_type (str) -- the name of an initialization method: normal | xavier
-                           | kaiming | orthogonal
-        init_gain (float)    -- scaling factor for normal, xavier and orthogonal.
-    Function extracted from https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/
-    """
-    def init_func(m):  # define the initialization function
-        classname = m.__class__.__name__
-        if hasattr(m, 'weight') and (classname.find('Conv') != -1 or
-                                     classname.find('Linear') != -1):
-            if init_type == 'normal':
-                init.normal_(m.weight.data, 0.0, init_gain)
-            elif init_type == 'xavier':
-                init.xavier_normal_(m.weight.data, gain=init_gain)
-            elif init_type == 'kaiming':
-                init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
-            elif init_type == 'orthogonal':
-                init.orthogonal_(m.weight.data, gain=init_gain)
-            else:
-                raise NotImplementedError('initialization method [%s] \
-                                           is not implemented' % init_type)
-            if hasattr(m, 'bias') and m.bias is not None:
-                init.constant_(m.bias.data, 0.0)
-        # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
-        elif classname.find('BatchNorm2d') != -1:
-            init.normal_(m.weight.data, 1.0, init_gain)
-            init.constant_(m.bias.data, 0.0)
-
-    print('initialize network with %s' % init_type)
-    net.apply(init_func)  # apply the initialization function <init_func>
-
 def set_mode(nets, mode='train'):
     for _, net in nets.items():
         if mode == 'train':
@@ -174,11 +210,6 @@ def set_mode(nets, mode='train'):
             print(f'Unable to set network in mode {mode}!')
 
     print(f'Models {nets.keys()} are now in {mode} mode.!')
-
-def set_requires_grad(nets, requires_grad=False):
-    for net in nets:
-        for param in net.parameters():
-            param.requires_grad = requires_grad
 
 def save_model(nets, optimizers, tag, dir_path):
     _out_path = os.path.join(dir_path, "chk_" + tag + '.pkl')
@@ -211,11 +242,20 @@ def load_model(nets, optimizers, start_epoch, start_iter, dir_path, device):
 
 def get_mse_loss(output, label):
     if label.lower() == 'real':
-        target = torch.ones_like(output)
+        target = torch.ones_like(output, requires_grad=False)
     else:
-        target = torch.zeros_like(output)
+        target = torch.zeros_like(output, requires_grad=False)
 
     return F.mse_loss(output, target)
+
+def save_to_disk(batch, batch_idx, path):
+    to_pil = transforms.ToPILImage()
+
+    for i, image in enumerate(batch):
+        _filename = os.path.join(path, f'output_{batch_idx}_{i}.jpg')
+        _pil_img = to_pil(image.detach().cpu())
+        _pil_img.save(_filename, "JPEG")
+
 
 """def denormalize(x):
     out = (x + 1) / 2
