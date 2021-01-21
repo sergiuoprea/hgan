@@ -71,10 +71,7 @@ class SynthHandsDataModule(pl.LightningDataModule):
         parser.add_argument('--sh_path', type=str, default='/src/datasets/synthhands', help='path to the SynthHands dataset root folder.')
         parser.add_argument('--sh_json', type=bool, default=False, help='if true: gather data paths of SynthHands dataset to a json file, pairing the rgb images with their respective masks.')
         parser.add_argument('--sh_mean_std', type=bool, default=False, help='if true: calculate the mean and standard deviation for the SynthHands dataset.')
-        parser.add_argument('--sh_shuffle', type=bool, default=True)
         parser.add_argument('--sh_with_objects', type=bool, default=False)
-        parser.add_argument('--sh_crop_size', type=int, default=256)
-        parser.add_argument('--sh_valid_size', type=int, default=1000)
 
         return parser
 
@@ -104,7 +101,7 @@ class SynthHandsDataModule(pl.LightningDataModule):
                     _path = os.path.join(_folder, _sequence)
                     self.data.extend(self.get_data_by_extension(_path))
 
-            if self.hparams.sh_shuffle:
+            if self.hparams.shuffle:
                 random.shuffle(self.data)
 
             with open(os.path.join(self.hparams.sh_path, 'synthhands.json'), 'w') as _file:
@@ -117,21 +114,23 @@ class SynthHandsDataModule(pl.LightningDataModule):
 
     def setup(self):
         ops = {}
-        ops['rgb'] = transforms.Compose([transforms.CenterCrop(self.hparams.sh_crop_size),
+        ops['rgb'] = transforms.Compose([transforms.CenterCrop(self.hparams.crop_size),
                                       transforms.ToTensor(),
                                       transforms.Normalize(mean= self.mean,
                                                            std = self.std)])
 
-        ops['mask'] = transforms.Compose([transforms.CenterCrop(self.hparams.sh_crop_size),
+        ops['mask'] = transforms.Compose([transforms.CenterCrop(self.hparams.crop_size),
                                        transforms.ToTensor()])
 
         #Train/Validation split
         indices = list(range(len(self.data)))
-        valid_dataset = Subset(self.data, indices[:self.hparams.sh_valid_size])
-        train_dataset = Subset(self.data, indices[self.hparams.sh_valid_size:])
+        test_dataset = Subset(self.data, indices[:self.hparams.test_size])
+        valid_dataset = Subset(self.data, indices[self.hparams.test_size:self.hparams.test_size + self.hparams.valid_size])
+        train_dataset = Subset(self.data, indices[self.hparams.test_size + self.hparams.valid_size:])
 
         self.datasets['train'] = SynthHandsDataset(train_dataset, ops)
         self.datasets['valid'] = SynthHandsDataset(valid_dataset, ops)
+        self.datasets['test'] = SynthHandsDataset(test_dataset, ops)
         self.datasets['mean_std'] = SynthHandsDataset(random.sample(self.data, 20000), transforms.ToTensor())
 
     def get_dataset(self, mode='train'):

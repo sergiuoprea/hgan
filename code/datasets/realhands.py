@@ -3,6 +3,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from PIL import Image
 import torch.utils.data
+from torch.utils.data import Subset
 from datasets.utils import calculate_mean_and_std, Denormalize
 
 from argparse import ArgumentParser
@@ -65,8 +66,6 @@ class RealHandsDataModule(pl.LightningDataModule):
         parser.add_argument('--rh_path', type=str, default='/src/datasets/realhands', help='path to the RealHands dataset root folder.')
         parser.add_argument('--rh_json', type=bool, default=False, help='if true: gather data paths of RealHands dataset to a json file, pairing the rgb images with their respective masks.')
         parser.add_argument('--rh_mean_std', type=bool, default=False, help='if true: calculate the mean and standard deviation for the RealHands dataset.')
-        parser.add_argument('--rh_shuffle', type=bool, default=True)
-        parser.add_argument('--rh_crop_size', type=int, default=256)
 
         return parser
 
@@ -102,7 +101,7 @@ class RealHandsDataModule(pl.LightningDataModule):
 
                 self.data.extend(_buffer)
 
-            if self.hparams.rh_shuffle:
+            if self.hparams.shuffle:
                 random.shuffle(self.data)
 
             with open(os.path.join(self.hparams.rh_path, 'realhands.json'), 'w') as _file:
@@ -117,15 +116,22 @@ class RealHandsDataModule(pl.LightningDataModule):
 
     def setup(self):
         ops = {}
-        ops['rgb'] = transforms.Compose([transforms.CenterCrop(self.hparams.rh_crop_size),
+        ops['rgb'] = transforms.Compose([transforms.CenterCrop(self.hparams.crop_size),
                                       transforms.ToTensor(),
                                       transforms.Normalize(mean= self.mean,
                                                            std = self.std)])
 
-        ops['mask'] = transforms.Compose([transforms.CenterCrop(self.hparams.rh_crop_size),
+        ops['mask'] = transforms.Compose([transforms.CenterCrop(self.hparams.crop_size),
                                        transforms.ToTensor()])
 
-        self.datasets['train'] = RealHandsDataset(self.data, ops)
+        indices = list(range(len(self.data)))
+        test_dataset = Subset(self.data, indices[:self.hparams.test_size])
+        valid_dataset = Subset(self.data, indices[self.hparams.test_size:self.hparams.test_size + self.hparams.valid_size])
+        train_dataset = Subset(self.data, indices[self.hparams.test_size + self.hparams.valid_size:])
+
+        self.datasets['train'] = RealHandsDataset(train_dataset, ops)
+        self.datasets['valid'] = RealHandsDataset(valid_dataset, ops)
+        self.datasets['test'] = RealHandsDataset(test_dataset, ops)
         self.datasets['mean_std'] = RealHandsDataset(self.data, transforms.ToTensor())
         #ToDo make the splits into training, validation, test sets if necessary
 
