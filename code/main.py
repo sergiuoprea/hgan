@@ -1,8 +1,11 @@
-#from vanilla_cyclegan.cyclegan import CycleGAN
-from vanilla_cyclegan.cyclegan import CycleGAN
-from pytorch_lightning.loggers import TensorBoardLogger
 import pytorch_lightning as pl
+from vanilla_cyclegan.cyclegan import CycleGAN
+from vanilla_cyclegan.cyclegan import ValidationCallback
+from pytorch_lightning.loggers.neptune import NeptuneLogger
+import neptune_cfg
 from datasets.dataloader import PairedDataModule, update_dataset_specific_args
+from datasets.synthhands import SynthHandsDataModule
+
 from argparse import ArgumentParser
 import torch
 
@@ -15,13 +18,27 @@ if __name__ == '__main__':
     parser = CycleGAN.add_model_specific_args(parser)
     args = parser.parse_args()
 
-    logger = TensorBoardLogger('tb_logs', name='cycle_gan')
+    # Loggers
+    logger = NeptuneLogger(api_key=neptune_cfg.key, project_name=neptune_cfg.project, params=vars(args))
 
+    # Datamodule
     dm = PairedDataModule(DATASETS, args)
     dm.prepare_data()
-    dm.setup(mode='train')
+    dm.setup()
 
-    vanilla_cyclegan = CycleGAN(hparams=args)
+    # CycleGAN instance
+    net = CycleGAN(hparams=args)
 
-    trainer = pl.Trainer(gpus=1, precision=32, logger=logger, log_every_n_steps=5)
-    trainer.fit(vanilla_cyclegan, dm)
+    # Set seed and deterministic flag in the Trainer to True if a deterministic behavior is expected
+    pl.seed_everything(23)
+
+    # Trainer instance
+    trainer = pl.Trainer(gpus=1, precision=32, logger=logger, val_check_interval=0.10,
+                         deterministic=True, callbacks=[ValidationCallback()],
+                         limit_val_batches=100, limit_train_batches=4000)
+
+    # Train the model
+    trainer.fit(net, dm)
+
+    # Stop Neptune logging
+    logger.experiment.stop()

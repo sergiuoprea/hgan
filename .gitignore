@@ -129,4 +129,4 @@ dmypy.json
 .pyre/
 
 # Neptune config file with credentials
-.neptune_cfg
+neptune_cfg.py
