@@ -67,12 +67,12 @@ def define_discriminator(in_ch, ndf, net, ndl=3, norm='batch'):
 
     return model
 
-def _test_net(net='patch'):
-    inp = torch.randn(1, 3, 256, 256, device='cuda')
-    network = define_discriminator(3, 64, net).to('cuda')
-    out = network(inp)
-    print(out)
-    summary(network, [(3, 128, 128)])
+#def _test_net(net='patch'):
+#    inp = torch.randn(1, 3, 256, 256, device='cuda')
+#    network = define_discriminator(3, 64, net).to('cuda')
+#    out = network(inp)
+#    print(out)
+#    summary(network, [(3, 128, 128)])
 
-if __name__ == '__main__':
-    _test_net('patch')
+#if __name__ == '__main__':
+#    _test_net('patch')

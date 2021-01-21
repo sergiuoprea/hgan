@@ -1,18 +1,25 @@
 import torch
+import os
 from torch.optim import Adam
 import pytorch_lightning as pl
 from torch.nn import functional as F
 from torchvision.utils import make_grid
+from pytorch_lightning.callbacks import Callback
 
 from vanilla_cyclegan.discriminator import define_discriminator
 from vanilla_cyclegan.generator import define_generator
-from vanilla_cyclegan.utils import init_weights, ImagePool, set_requires_grad, get_mse_loss
+from vanilla_cyclegan.utils import Initializer, ImagePool, set_requires_grad, get_mse_loss, save_to_disk
 
 import datasets.synthhands as sh
 import datasets.realhands as rh
 
 from itertools import chain
 from argparse import ArgumentParser
+
+from metrics.inception import InceptionV3
+from metrics.fid import fid
+
+from loss.vgg_perceptual import VGGPerceptualLoss
 
 class CycleGAN(pl.LightningModule):
     def __init__(self, hparams):
@@ -42,9 +49,13 @@ class CycleGAN(pl.LightningModule):
                                                  net=hparams.netD, ndl=hparams.ndl,
                                                  norm=hparams.norm).cuda()
 
+        if hparams.perceptual > 0:
+            self.vgg = VGGPerceptualLoss().cuda()
+
         # Initialize models' weights
+        init = Initializer(init_type=hparams.init_type, init_gain=0.02)
         for _model in self.models:
-            init_weights(self.models[_model], init_type=hparams.init_type)
+            init(self.models[_model])
 
         # ImagePool from where we randomly get generated images in both domains
         self.pool_fakeA = ImagePool(50)
@@ -71,24 +82,31 @@ class CycleGAN(pl.LightningModule):
         parser.add_argument('--lambda_idt', type=float, default=0.5, help='use identity mapping. Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss. For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, please set lambda_identity = 0.1')
         parser.add_argument('--lambda_a', type=float, default=10.0, help='weight for cycle loss (A -> B -> A)')
         parser.add_argument('--lambda_b', type=float, default=10.0, help='weight for cycle loss (B -> A -> B)')
+        parser.add_argument('--valid_out_pth', type=str, default="/src/github_repos/a-gan-in-your-hands/valid_outputs/")
+        parser.add_argument('--masked', type=bool, default=True)
+        parser.add_argument('--fid_dims', type=int, default=2048)
+        parser.add_argument('--perceptual', type=float, default=0.25)
 
         return parser
 
     def configure_optimizers(self):
-        generator_optimizer = Adam(chain(self.models['gAtoB'].parameters(),
-                                         self.models['gBtoA'].parameters()),
-                                   lr=self.hparams.glr, betas=(0.5, 0.999))
-        discriminator_optimizer = Adam(chain(self.models['dA'].parameters(),
-                                             self.models['dB'].parameters()),
-                                       lr=self.hparams.dlr, betas=(0.5, 0.999))
+        # optimizers
+        g_opt = Adam(chain(self.models['gAtoB'].parameters(), self.models['gBtoA'].parameters()),
+                           lr=self.hparams.glr, betas=(0.5, 0.999))
+        da_opt = Adam(self.models['dA'].parameters(), lr=self.hparams.dlr, betas=(0.5, 0.999))
+        db_opt = Adam(self.models['dB'].parameters(), lr=self.hparams.dlr, betas=(0.5, 0.999))
 
-        return [generator_optimizer, discriminator_optimizer]
+        return [g_opt, da_opt, db_opt]
 
-    def generator_pass(self, realA, realB):
-        gen_losses = {}
+    def generator_pass(self, realA, realB, maskA, maskB):
+        _losses = {}
 
         self.fakeA = self.models['gBtoA'](realB) # G_BtoA(B)
         self.fakeB = self.models['gAtoB'](realA) # G_AtoB(A)
+
+        if self.hparams.masked:
+            self.fakeA = self.fakeA * maskB + realB * (1 - maskB)
+            self.fakeB = self.fakeB * maskA + realA * (1 - maskA)
 
         recA = self.models['gBtoA'](self.fakeB)  # G_BtoA(G_AtoB(A))
         recB = self.models['gAtoB'](self.fakeA)  # G_AtoB(G_BtoA(B))
@@ -97,73 +115,127 @@ class CycleGAN(pl.LightningModule):
         idtB = self.models['gBtoA'](realA)  # G_BtoA(A)
 
         # Generators must fool the discriminators, so the label is real
-        gen_losses['gBtoA'] = get_mse_loss(self.models['dA'](self.fakeA), 'real') # D_A(G_BtoA(B))
-        gen_losses['gAtoB'] = get_mse_loss(self.models['dB'](self.fakeB), 'real') # D_B(G_AtoB(A))
+        _losses['gBtoA'] = get_mse_loss(self.models['dB'](self.fakeA), 'real') # D_A(G_BtoA(B))
+        _losses['gAtoB'] = get_mse_loss(self.models['dA'](self.fakeB), 'real') # D_B(G_AtoB(A))
 
         #Identity losses
         if self.hparams.lambda_idt > 0:
-            gen_losses['idtA'] = F.l1_loss(idtA, realB) * self.hparams.lambda_a * self.hparams.lambda_idt
-            gen_losses['idtB'] = F.l1_loss(idtB, realA) * self.hparams.lambda_b * self.hparams.lambda_idt
-        else:
-            gen_losses['idtA'] = 0
-            gen_losses['idtB'] = 0
+            _losses['idtA'] = F.l1_loss(idtA, realB) * self.hparams.lambda_b * self.hparams.lambda_idt
+            _losses['idtB'] = F.l1_loss(idtB, realA) * self.hparams.lambda_a * self.hparams.lambda_idt
+
+        if self.hparams.perceptual > 0:
+            _perceptual_loss = 0
+            with torch.no_grad():
+                _vgg_realA = self.vgg(realA)
+                _vgg_fakeA = self.vgg(self.fakeA)
+                _vgg_recA = self.vgg(recA)
+                _vgg_realB = self.vgg(realB)
+                _vgg_fakeB = self.vgg(self.fakeB)
+                _vgg_recB = self.vgg(recB)
+
+            _perceptual_loss += torch.nn.functional.l1_loss(_vgg_realA[1], _vgg_recA[1]) * self.hparams.perceptual
+            _perceptual_loss += torch.nn.functional.l1_loss(_vgg_realB[1], _vgg_recB[1]) * self.hparams.perceptual
+            _perceptual_loss += torch.nn.functional.l1_loss(_vgg_fakeA[3], _vgg_realA[3]) * self.hparams.perceptual
+            _perceptual_loss += torch.nn.functional.l1_loss(_vgg_fakeB[3], _vgg_realB[3]) * self.hparams.perceptual
+
+            _losses['per'] = _perceptual_loss
 
         # Cycle-consistency losses
-        gen_losses['cycleAB'] = F.l1_loss(recA, realA) * self.hparams.lambda_a
-        gen_losses['cycleBA'] = F.l1_loss(recB, realB) * self.hparams.lambda_b
+        _losses['cycleAB'] = F.l1_loss(recA, realA) * self.hparams.lambda_a
+        _losses['cycleBA'] = F.l1_loss(recB, realB) * self.hparams.lambda_b
 
         # Total generator loss
-        gen_losses['genTotal'] = sum(gen_losses.values())
+        _losses['genTotal'] = sum(_losses.values())
 
-        # Tensorboard Logging
-        self.log_images(realA, realB)
-        self.log_losses(gen_losses)
+        # Logging
+        self.log_images(realA, realB, maskA, maskB)
+        self.log_losses(_losses)
 
-        return gen_losses['genTotal'] 
+        return _losses['genTotal']
 
-    def discriminator_pass(self, realA, realB):
-        dis_losses = {}
+    def discriminator_pass(self, net, real, fake):
+        _losses = {}
 
-        fakeA = self.pool_fakeA.query(self.fakeA)
-        fakeB = self.pool_fakeB.query(self.fakeB)
+        _losses['real_'+net] = get_mse_loss(self.models[net](real), 'real')
+        _losses['fake_'+net] = get_mse_loss(self.models[net](fake.detach()), 'fake')
+        _losses['tot_'+net] = (_losses['real_'+net] + _losses['fake_'+net]) * 0.5
 
-        dis_losses['realAd'] = get_mse_loss(self.models['dA'](realA), 'real')
-        dis_losses['realBd'] = get_mse_loss(self.models['dB'](realB), 'real')
+        # Logging
+        self.log_losses(_losses)
 
-        dis_losses['fakeAd'] = get_mse_loss(self.models['dA'](fakeA.detach()), 'fake')
-        dis_losses['fakeBd'] = get_mse_loss(self.models['dB'](fakeB.detach()), 'fake')
-
-        # Total discriminators loss
-        dis_losses['disTotal'] = sum(dis_losses.values()) * 0.5
-
-        #Tensorboard logging
-        self.log_losses(dis_losses)
-
-        return dis_losses['disTotal']
+        return _losses['tot_'+net]
 
     def training_step(self, batch, batch_idx, optimizer_idx):
         domainA, domainB = batch
-        realA = domainA['rgb']
-        realB = domainB['rgb']
+        realA, realB, maskA, maskB = domainA['rgb'], domainB['rgb'], domainA['mask'], domainB['mask']
 
-        discriminator_requires_grad = (optimizer_idx == 1)
-        set_requires_grad([self.models['dA'], self.models['dB']], discriminator_requires_grad)        
-
+        # Generators
         if optimizer_idx == 0:
-            return self.generator_pass(realA, realB)
-        else:
-            return self.discriminator_pass(realA, realB)
+            set_requires_grad([self.models['dA'], self.models['dB']], requires_grad= False)
+            return self.generator_pass(realA, realB, maskA, maskB)
 
-    def log_images(self, inp_A, inp_B):
+        # Discriminator A
+        if optimizer_idx == 1:
+            set_requires_grad(self.models['dA'], requires_grad=True)
+            fakeB = self.pool_fakeB.query(self.fakeB)
+            return self.discriminator_pass('dA', realB, fakeB)
+
+        # Discriminator B
+        if optimizer_idx == 2:
+            set_requires_grad(self.models['dB'], requires_grad=True)
+            fakeA = self.pool_fakeA.query(self.fakeA)
+            return self.discriminator_pass('dB', realA, fakeA)
+
+    def validation_step(self, batch, batch_idx):
+        domainA, domainB = batch
+        real_imgs = domainA['rgb']
+        synth_imgs = domainB['rgb']
+
+        real_imgs = self.trainer.datamodule.denormalizers[0](real_imgs)
+
+        test = self.inception_model(real_imgs)[0]
+        # Calculate FID metric
+        # Inceltion activations for real images of hands
+        self.inception_real = torch.cat((self.inception_real,
+                                         self.inception_model(real_imgs)[0].squeeze()))
+
+        # Generator forward step to translate synthetic into real
+        _outputs = self.models['gBtoA'](synth_imgs)
+        _outputs = self.trainer.datamodule.denormalizers[1](_outputs)
+        # Inception activations for generated images
+        self.inception_gen = torch.cat((self.inception_gen,
+                                        self.inception_model(_outputs)[0].squeeze()))
+
+        #outputs = self.trainer.datamodule.denormalizers[0](self.models['gBtoA'](imgs))
+        #save_to_disk(outputs, batch_idx, self.hparams.valid_out_pth)
+
+    def log_images(self, inp_A, inp_B, maskA, maskB):
         merged_out = torch.cat((inp_A, self.fakeB, inp_B, self.fakeA), 0)
         merged_out = self.trainer.datamodule.denormalizers[0](merged_out)
+        masks = torch.cat((maskA, maskB), 0)
 
-        self.trainer.logger.experiment.add_image('From top to bottom: inpA, fakeB, inpB, fakeA',
-                                                  make_grid(merged_out,
-                                                  nrow=self.hparams.batch_size),
-                                                  self.trainer.global_step)
+        self.trainer.logger.experiment.log_image(log_name='From top to bottom: inpA, fakeB, inpB, fakeA',
+                                                 x = make_grid(merged_out, nrow=self.hparams.batch_size).permute(1, 2, 0).cpu())
+
+        self.trainer.logger.experiment.log_image(log_name='Masks',
+                                                 x = make_grid(masks, nrow=self.hparams.batch_size).permute(1, 2, 0).cpu())
 
     def log_losses(self, losses):
         for key, value in losses.items():
-            self.trainer.logger.experiment.add_scalar('Loss ' + key, value,
-                                                      self.trainer.global_step)
+            self.trainer.logger.experiment.log_metric(log_name='Loss '+key, x = value)
+
+class ValidationCallback(Callback):
+    def on_validation_start(self, trainer, pl_module):
+        pl_module.inception_real = torch.empty(0, device='cuda')
+        pl_module.inception_gen = torch.empty(0, device='cuda')
+
+        _block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[pl_module.hparams.fid_dims]
+        pl_module.inception_model = InceptionV3([_block_idx])
+        pl_module.inception_model.cuda()
+        pl_module.inception_model.eval()
+
+    def on_validation_end(self, trainer, pl_module):
+        fid_score = fid(pl_module.inception_real.cpu().data.numpy(),
+                        pl_module.inception_gen.cpu().data.numpy())
+        print(fid_score)
+        trainer.logger.experiment.log_metric(log_name = 'FID', x = fid_score)

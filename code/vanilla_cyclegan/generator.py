@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
-from torchsummary import summary
+#from torchsummary import summary
 from vanilla_cyclegan.utils import ConvBlock, ResidualBlock, TransConvBlock, get_norm_layer
 
 class Resnet(nn.Module):
@@ -80,12 +80,12 @@ def define_generator(in_ch, out_ch, ngf, net, norm='batch', use_dropout=False):
 
     return model
 
-def _test_net():
-    inp = torch.randn(1, 3, 256, 256, device='cuda')
-    network = define_generator(3, 3, 64, 'resnet_9blocks').to('cuda')
-    out = network(inp)
-    print(out)
-    summary(network, [(3, 256, 256)])
+#def _test_net():
+#    inp = torch.randn(1, 3, 256, 256, device='cuda')
+#    network = define_generator(3, 3, 64, 'resnet_9blocks').to('cuda')
+#    out = network(inp)
+#    print(out)
+#    summary(network, [(3, 256, 256)])
 
-if __name__ == '__main__':
-    _test_net()
+#if __name__ == '__main__':
+#    _test_net()
