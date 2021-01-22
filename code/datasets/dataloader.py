@@ -23,12 +23,13 @@ class MultipleDataModule(pl.LightningDataModule):
     @staticmethod
     def add_model_specific_args(parent_parser, datasets):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--batch_size', type=int, default=2)
+        parser.add_argument('--batch_size', type=int, default=16)
         parser.add_argument('--num_workers', type=int, default=8)
         parser.add_argument('--valid_size', type=int, default=1000)
         parser.add_argument('--test_size', type=int, default=500)
-        parser.add_argument('--crop_size', type=int, default=256)
+        parser.add_argument('--crop_size', type=int, default=64)
         parser.add_argument('--shuffle', type=bool, default=True)
+        parser.add_argument('--random_crop', type=bool, default=True)
 
         # Take into account the arguments of each dataset
         for dataset in datasets:

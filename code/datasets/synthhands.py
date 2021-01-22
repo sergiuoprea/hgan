@@ -1,10 +1,10 @@
 import pytorch_lightning as pl
-from torchvision import transforms
+from datasets.transforms import CenterCrop, MaskedRandomCrop, Normalize, ToTensor, Compose, Denormalize
 from torch.utils.data import DataLoader
 from PIL import Image
 import torch.utils.data
 from torch.utils.data import Subset
-from datasets.utils import calculate_mean_and_std, Denormalize
+from datasets.utils import calculate_mean_and_std
 
 from argparse import ArgumentParser
 import json
@@ -21,24 +21,15 @@ class SynthHandsDataset(torch.utils.data.Dataset):
         _out = {}
         _path = self.data[idx]
 
-        _rgb = Image.open(_path)
-        _rgb = np.array(_rgb)
-
+        _rgb = np.array(Image.open(_path))[:, :, :3]
         _rgb, _mask = self.preprocess_rgb_and_get_mask(_rgb)
-        _mask = np.uint8(_mask * 255)
-
-        _rgb = Image.fromarray(_rgb[:, :, :3])
-        _mask = Image.fromarray(_mask)
 
         if self.ops:
-            _rgb = self.ops['rgb'](_rgb)
-            _mask = self.ops['mask'](_mask)
+            _sample = self.ops({'rgb': _rgb, 'mask': _mask})
 
-        _out['rgb'] = _rgb
-        _out['mask'] = _mask
-        _out['paths'] = _path
+        _sample['paths'] = _path
 
-        return _out
+        return _sample
 
     def __len__(self):
         return len(self.data)
@@ -48,7 +39,7 @@ class SynthHandsDataset(torch.utils.data.Dataset):
         mask = (red == 14) & (green == 255) & (blue == 14)
         image[mask == 1] = 255
 
-        return image, ~mask
+        return image, np.uint8(~mask * 255)
 
 class SynthHandsDataModule(pl.LightningDataModule):
     def __init__(self, hparams):
@@ -113,25 +104,26 @@ class SynthHandsDataModule(pl.LightningDataModule):
             mean, std = calculate_mean_and_std(dataloader)
 
     def setup(self):
-        ops = {}
-        ops['rgb'] = transforms.Compose([transforms.CenterCrop(self.hparams.crop_size),
-                                      transforms.ToTensor(),
-                                      transforms.Normalize(mean= self.mean,
-                                                           std = self.std)])
+        ops = []
 
-        ops['mask'] = transforms.Compose([transforms.CenterCrop(self.hparams.crop_size),
-                                       transforms.ToTensor()])
+        if self.hparams.random_crop:
+            ops.append(MaskedRandomCrop(self.hparams.crop_size))
+        else:
+            ops.append(CenterCrop(self.hparams.crop_size))
 
-        #Train/Validation split
+        ops.append(ToTensor())
+        ops.append(Normalize(mean= self.mean, std= self.std))
+
+        # Data split into train, valid and test sets.
         indices = list(range(len(self.data)))
         test_dataset = Subset(self.data, indices[:self.hparams.test_size])
         valid_dataset = Subset(self.data, indices[self.hparams.test_size:self.hparams.test_size + self.hparams.valid_size])
         train_dataset = Subset(self.data, indices[self.hparams.test_size + self.hparams.valid_size:])
 
-        self.datasets['train'] = SynthHandsDataset(train_dataset, ops)
-        self.datasets['valid'] = SynthHandsDataset(valid_dataset, ops)
-        self.datasets['test'] = SynthHandsDataset(test_dataset, ops)
-        self.datasets['mean_std'] = SynthHandsDataset(random.sample(self.data, 20000), transforms.ToTensor())
+        self.datasets['train'] = SynthHandsDataset(train_dataset, Compose(ops))
+        self.datasets['valid'] = SynthHandsDataset(valid_dataset, Compose(ops))
+        self.datasets['test'] = SynthHandsDataset(test_dataset, Compose(ops))
+        self.datasets['mean_std'] = SynthHandsDataset(random.sample(self.data, 20000), ToTensor())
 
     def get_dataset(self, mode='train'):
         return self.datasets[mode]
