@@ -6,8 +6,8 @@ from torch.nn import functional as F
 from torchvision.utils import make_grid
 from pytorch_lightning.callbacks import Callback
 
-from vanilla_cyclegan.discriminator import define_discriminator
-from vanilla_cyclegan.generator import define_generator
+from vanilla_cyclegan.discriminator import discriminator
+from vanilla_cyclegan.generator import generator
 from vanilla_cyclegan.utils import Initializer, ImagePool, set_requires_grad, get_mse_loss, save_to_disk
 
 import datasets.synthhands as sh
@@ -26,36 +26,33 @@ class CycleGAN(pl.LightningModule):
         super().__init__()
         print("Initializing Vanilla CycleGAN!")
         self.hparams = hparams
-        self.models = {} #network modules (generators and discriminators)
+        #self.models = {} #network modules (generators and discriminators)
+
+        init = Initializer(init_type=hparams.init_type, init_gain=0.02)
 
         # Network architecture
         # Define the two generators, one for each domain:
         #  - gAtoB: A to B domain translation
         #  - gBtoA: B to A domain translation
-        self.models['gAtoB'] = define_generator(in_ch=hparams.inp_ch, out_ch=hparams.out_ch,
-                                                ngf=hparams.ngf, net=hparams.netG,
-                                                norm=hparams.norm, use_dropout=hparams.use_dropout).cuda()
-        self.models['gBtoA'] = define_generator(in_ch=hparams.inp_ch, out_ch=hparams.out_ch,
-                                                ngf=hparams.ngf, net=hparams.netG,
-                                                norm=hparams.norm, use_dropout=hparams.use_dropout).cuda()
+        self.g_ab = init(generator(in_ch=hparams.inp_ch, out_ch=hparams.out_ch,
+                            ngf=hparams.ngf, net=hparams.netG,
+                            norm=hparams.norm, use_dropout=hparams.use_dropout))
+        self.g_ba = init(generator(in_ch=hparams.inp_ch, out_ch=hparams.out_ch,
+                            ngf=hparams.ngf, net=hparams.netG,
+                            norm=hparams.norm, use_dropout=hparams.use_dropout))
 
         # Define the discriminators:
         #  - dA: discriminator for domain A
         #  - dB: discriminator for domain B
-        self.models['dA'] = define_discriminator(in_ch=hparams.inp_ch, ndf=hparams.ndf,
-                                                 net=hparams.netD, ndl=hparams.ndl,
-                                                 norm=hparams.norm).cuda()
-        self.models['dB'] = define_discriminator(in_ch=hparams.inp_ch, ndf=hparams.ndf,
-                                                 net=hparams.netD, ndl=hparams.ndl,
-                                                 norm=hparams.norm).cuda()
+        self.d_a = init(discriminator(in_ch=hparams.inp_ch, ndf=hparams.ndf,
+                                 net=hparams.netD, ndl=hparams.ndl,
+                                 norm=hparams.norm))
+        self.d_b = init(discriminator(in_ch=hparams.inp_ch, ndf=hparams.ndf,
+                                 net=hparams.netD, ndl=hparams.ndl,
+                                 norm=hparams.norm))
 
         if hparams.perceptual > 0:
-            self.vgg = VGGPerceptualLoss().cuda()
-
-        # Initialize models' weights
-        init = Initializer(init_type=hparams.init_type, init_gain=0.02)
-        for _model in self.models:
-            init(self.models[_model])
+            self.vgg = VGGPerceptualLoss().eval()
 
         # ImagePool from where we randomly get generated images in both domains
         self.pool_fakeA = ImagePool(50)
@@ -92,32 +89,32 @@ class CycleGAN(pl.LightningModule):
 
     def configure_optimizers(self):
         # optimizers
-        g_opt = Adam(chain(self.models['gAtoB'].parameters(), self.models['gBtoA'].parameters()),
+        g_opt = Adam(chain(self.g_ab.parameters(), self.g_ba.parameters()),
                            lr=self.hparams.glr, betas=(0.5, 0.999))
-        da_opt = Adam(self.models['dA'].parameters(), lr=self.hparams.dlr, betas=(0.5, 0.999))
-        db_opt = Adam(self.models['dB'].parameters(), lr=self.hparams.dlr, betas=(0.5, 0.999))
+        da_opt = Adam(self.d_a.parameters(), lr=self.hparams.dlr, betas=(0.5, 0.999))
+        db_opt = Adam(self.d_b.parameters(), lr=self.hparams.dlr, betas=(0.5, 0.999))
 
         return [g_opt, da_opt, db_opt]
 
     def generator_pass(self, realA, realB, maskA, maskB):
         _losses = {}
 
-        self.fakeA = self.models['gBtoA'](realB) # G_BtoA(B)
-        self.fakeB = self.models['gAtoB'](realA) # G_AtoB(A)
+        self.fakeA = self.g_ba(realB) # G_BtoA(B)
+        self.fakeB = self.g_ab(realA) # G_AtoB(A)
 
         if self.hparams.masked:
             self.fakeA = self.fakeA * maskB + realB * (1 - maskB)
             self.fakeB = self.fakeB * maskA + realA * (1 - maskA)
 
-        recA = self.models['gBtoA'](self.fakeB)  # G_BtoA(G_AtoB(A))
-        recB = self.models['gAtoB'](self.fakeA)  # G_AtoB(G_BtoA(B))
+        recA = self.g_ba(self.fakeB)  # G_BtoA(G_AtoB(A))
+        recB = self.g_ab(self.fakeA)  # G_AtoB(G_BtoA(B))
 
-        idtA = self.models['gAtoB'](realB)  # G_AtoB(B)
-        idtB = self.models['gBtoA'](realA)  # G_BtoA(A)
+        idtA = self.g_ab(realB)  # G_AtoB(B)
+        idtB = self.g_ba(realA)  # G_BtoA(A)
 
         # Generators must fool the discriminators, so the label is real
-        _losses['gBtoA'] = get_mse_loss(self.models['dB'](self.fakeA), 'real') # D_A(G_BtoA(B))
-        _losses['gAtoB'] = get_mse_loss(self.models['dA'](self.fakeB), 'real') # D_B(G_AtoB(A))
+        _losses['gBtoA'] = get_mse_loss(self.d_b(self.fakeA), 'real') # D_A(G_BtoA(B))
+        _losses['gAtoB'] = get_mse_loss(self.d_a(self.fakeB), 'real') # D_B(G_AtoB(A))
 
         #Identity losses
         if self.hparams.lambda_idt > 0:
@@ -156,17 +153,17 @@ class CycleGAN(pl.LightningModule):
 
         return _losses['genTotal']
 
-    def discriminator_pass(self, net, real, fake):
+    def discriminator_pass(self, net, real, fake, name):
         _losses = {}
 
-        _losses['real_'+net] = get_mse_loss(self.models[net](real), 'real')
-        _losses['fake_'+net] = get_mse_loss(self.models[net](fake.detach()), 'fake')
-        _losses['tot_'+net] = (_losses['real_'+net] + _losses['fake_'+net]) * 0.5
+        _losses['real_'+ name] = get_mse_loss(net(real), 'real')
+        _losses['fake_'+ name] = get_mse_loss(net(fake.detach()), 'fake')
+        _losses['tot_'+ name] = (_losses['real_'+ name] + _losses['fake_'+ name]) * 0.5
 
         # Logging
         self.log_losses(_losses) # Log losses each trainings step
 
-        return _losses['tot_'+net]
+        return _losses['tot_'+ name]
 
     def training_step(self, batch, batch_idx, optimizer_idx):
         domainA, domainB = batch
@@ -174,20 +171,20 @@ class CycleGAN(pl.LightningModule):
 
         # Generators
         if optimizer_idx == 0:
-            set_requires_grad([self.models['dA'], self.models['dB']], requires_grad= False)
+            set_requires_grad([self.d_a, self.d_b], requires_grad= False)
             return self.generator_pass(realA, realB, maskA, maskB)
 
         # Discriminator A
         if optimizer_idx == 1:
-            set_requires_grad(self.models['dA'], requires_grad=True)
+            set_requires_grad(self.d_a, requires_grad=True)
             fakeB = self.pool_fakeB.query(self.fakeB)
-            return self.discriminator_pass('dA', realB, fakeB)
+            return self.discriminator_pass(self.d_a, realB, fakeB, 'dA')
 
         # Discriminator B
         if optimizer_idx == 2:
-            set_requires_grad(self.models['dB'], requires_grad=True)
+            set_requires_grad(self.d_b, requires_grad=True)
             fakeA = self.pool_fakeA.query(self.fakeA)
-            return self.discriminator_pass('dB', realA, fakeA)
+            return self.discriminator_pass(self.d_b, realA, fakeA, 'dB')
 
     def validation_step(self, batch, batch_idx):
         domainA, domainB = batch
@@ -203,13 +200,13 @@ class CycleGAN(pl.LightningModule):
                                          self.inception_model(real_imgs)[0].squeeze()))
 
         # Generator forward step to translate synthetic into real
-        _outputs = self.models['gBtoA'](synth_imgs)
+        _outputs = self.g_ba(synth_imgs)
         _outputs = self.trainer.datamodule.denormalizers[1](_outputs)
         # Inception activations for generated images
         self.inception_gen = torch.cat((self.inception_gen,
                                         self.inception_model(_outputs)[0].squeeze()))
 
-        #outputs = self.trainer.datamodule.denormalizers[0](self.models['gBtoA'](imgs))
+        #outputs = self.trainer.datamodule.denormalizers[0](self.g_ba(imgs))
         #save_to_disk(outputs, batch_idx, self.hparams.valid_out_pth)
 
     def log_images(self, inp_A, inp_B, maskA, maskB):

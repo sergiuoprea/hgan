@@ -32,8 +32,8 @@ if __name__ == '__main__':
     pl.seed_everything(23)
 
     # Trainer instance
-    trainer = pl.Trainer(gpus=1, precision=32, logger=logger, val_check_interval=0.10,
-                         deterministic=True, callbacks=[ValidationCallback()],
+    trainer = pl.Trainer(gpus=1, accumulate_grad_batches=1, precision=32, logger=logger,
+                         val_check_interval=0.10, deterministic=True, callbacks=[ValidationCallback()],
                          limit_val_batches=100, limit_train_batches=4000)
 
     # Train the mode

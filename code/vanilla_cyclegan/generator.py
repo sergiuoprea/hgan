@@ -62,7 +62,7 @@ class Resnet(nn.Module):
         return self.model(inp)
 
 
-def define_generator(in_ch, out_ch, ngf, net, norm='batch', use_dropout=False):
+def generator(in_ch, out_ch, ngf, net, norm='batch', use_dropout=False):
     model = None
     norm_layer = get_norm_layer(norm)
 

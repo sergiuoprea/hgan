@@ -54,7 +54,7 @@ class Pixel_Discriminator(pl.LightningModule):
         """ Standard forward implementation. """
         return self.model(inp)
 
-def define_discriminator(in_ch, ndf, net, ndl=3, norm='batch'):
+def discriminator(in_ch, ndf, net, ndl=3, norm='batch'):
     model = None
     norm_layer = get_norm_layer(norm_type=norm)
 
