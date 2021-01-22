@@ -1,6 +1,6 @@
 import torch
 import os
-from torch.optim import Adam
+import torch.optim as optim
 import pytorch_lightning as pl
 from torch.nn import functional as F
 from torchvision.utils import make_grid
@@ -84,17 +84,27 @@ class CycleGAN(pl.LightningModule):
         parser.add_argument('--fid_dims', type=int, default=2048)
         parser.add_argument('--perceptual', type=float, default=0.25)
         parser.add_argument('--log_freq', type=int, default=25)
+        parser.add_argument('--epoch_decay', type=int, default=5)
 
         return parser
 
+    def lr_lambda(self, epoch):
+        fraction = (epoch - self.hparams.epoch_decay) / self.hparams.epoch_decay
+        return 1 if epoch < self.hparams.epoch_decay else 1 - fraction
+
     def configure_optimizers(self):
         # optimizers
-        g_opt = Adam(chain(self.g_ab.parameters(), self.g_ba.parameters()),
+        g_opt = optim.Adam(chain(self.g_ab.parameters(), self.g_ba.parameters()),
                            lr=self.hparams.glr, betas=(0.5, 0.999))
-        da_opt = Adam(self.d_a.parameters(), lr=self.hparams.dlr, betas=(0.5, 0.999))
-        db_opt = Adam(self.d_b.parameters(), lr=self.hparams.dlr, betas=(0.5, 0.999))
+        da_opt = optim.Adam(self.d_a.parameters(), lr=self.hparams.dlr, betas=(0.5, 0.999))
+        db_opt = optim.Adam(self.d_b.parameters(), lr=self.hparams.dlr, betas=(0.5, 0.999))
 
-        return [g_opt, da_opt, db_opt]
+        # schedulers
+        g_sch = optim.lr_scheduler.LambdaLR(g_opt, lr_lambda=self.lr_lambda)
+        da_sch = optim.lr_scheduler.LambdaLR(da_opt, lr_lambda=self.lr_lambda)
+        db_sch = optim.lr_scheduler.LambdaLR(db_opt, lr_lambda=self.lr_lambda)
+
+        return [g_opt, da_opt, db_opt], [g_sch, da_sch, db_sch]
 
     def generator_pass(self, realA, realB, maskA, maskB):
         _losses = {}
