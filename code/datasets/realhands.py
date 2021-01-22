@@ -123,7 +123,7 @@ class RealHandsDataModule(pl.LightningDataModule):
         train_dataset = Subset(self.data, indices[self.hparams.test_size + self.hparams.valid_size:])
 
         self.datasets['train'] = RealHandsDataset(train_dataset, Compose(ops))
-        self.datasets['valid'] = RealHandsDataset(valid_dataset, Compose(ops))
+        self.datasets['valid'] = RealHandsDataset(valid_dataset, Compose(ops[1:]))
         self.datasets['test'] = RealHandsDataset(test_dataset, Compose(ops))
         self.datasets['mean_std'] = RealHandsDataset(self.data, ToTensor())
 

@@ -121,7 +121,7 @@ class SynthHandsDataModule(pl.LightningDataModule):
         train_dataset = Subset(self.data, indices[self.hparams.test_size + self.hparams.valid_size:])
 
         self.datasets['train'] = SynthHandsDataset(train_dataset, Compose(ops))
-        self.datasets['valid'] = SynthHandsDataset(valid_dataset, Compose(ops))
+        self.datasets['valid'] = SynthHandsDataset(valid_dataset, Compose(ops[1:]))
         self.datasets['test'] = SynthHandsDataset(test_dataset, Compose(ops))
         self.datasets['mean_std'] = SynthHandsDataset(random.sample(self.data, 20000), ToTensor())
 

@@ -23,7 +23,8 @@ class MultipleDataModule(pl.LightningDataModule):
     @staticmethod
     def add_model_specific_args(parent_parser, datasets):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--batch_size', type=int, default=16)
+        parser.add_argument('--train_bs', type=int, default=16)
+        parser.add_argument('--valid_bs', type=int, default=4)
         parser.add_argument('--num_workers', type=int, default=8)
         parser.add_argument('--valid_size', type=int, default=1000)
         parser.add_argument('--test_size', type=int, default=500)
@@ -60,12 +61,12 @@ class MultipleDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         return DataLoader(dataset=self.data['train'],
-                          batch_size=self.hparams.batch_size,
+                          batch_size=self.hparams.train_bs,
                           num_workers=self.hparams.num_workers)
 
     def val_dataloader(self):
         return DataLoader(dataset=self.data['valid'],
-                          batch_size=self.hparams.batch_size,
+                          batch_size=self.hparams.valid_bs,
                           num_workers=self.hparams.num_workers)
 
     def test_dataloader(self):

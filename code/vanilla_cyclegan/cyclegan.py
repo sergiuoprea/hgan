@@ -83,7 +83,8 @@ class CycleGAN(pl.LightningModule):
         parser.add_argument('--masked', type=bool, default=True)
         parser.add_argument('--fid_dims', type=int, default=2048)
         parser.add_argument('--perceptual', type=float, default=0.25)
-        parser.add_argument('--log_freq', type=int, default=25)
+        parser.add_argument('--train_log_freq', type=int, default=25)
+        parser.add_argument('--valid_log_freq', type=int, default=10)
         parser.add_argument('--epoch_decay', type=int, default=5)
 
         return parser
@@ -156,8 +157,10 @@ class CycleGAN(pl.LightningModule):
         _losses['genTotal'] = sum(_losses.values())
 
         # Logging
-        if self.trainer.global_step % self.hparams.log_freq == 0: # Log images every log_freq steps
-            self.log_images(realA, realB, maskA, maskB)
+        if self.trainer.global_step % self.hparams.train_log_freq == 0: # Log images every train_log_freq steps
+            self.log_visuals(images=(realA, self.fakeB, realB, self.fakeA),
+                             denorm=self.trainer.datamodule.denormalizers[0],
+                             log_name='Training visual outputs')
         
         self.log_losses(_losses) # Log losses each training step
 
@@ -201,34 +204,35 @@ class CycleGAN(pl.LightningModule):
         real_imgs = domainA['rgb']
         synth_imgs = domainB['rgb']
 
-        real_imgs = self.trainer.datamodule.denormalizers[0](real_imgs)
+        real_imgs_denorm = self.trainer.datamodule.denormalizers[0](real_imgs)
 
-        test = self.inception_model(real_imgs)[0]
+        test = self.inception_model(real_imgs_denorm)[0]
         # Calculate FID metric
         # Inceltion activations for real images of hands
         self.inception_real = torch.cat((self.inception_real,
-                                         self.inception_model(real_imgs)[0].squeeze()))
+                                         self.inception_model(real_imgs_denorm)[0].squeeze()))
 
         # Generator forward step to translate synthetic into real
-        _outputs = self.g_ba(synth_imgs)
-        _outputs = self.trainer.datamodule.denormalizers[1](_outputs)
+        outputs = self.g_ba(synth_imgs)
+        outputs_denorm = self.trainer.datamodule.denormalizers[1](outputs)
         # Inception activations for generated images
         self.inception_gen = torch.cat((self.inception_gen,
-                                        self.inception_model(_outputs)[0].squeeze()))
+                                        self.inception_model(outputs_denorm)[0].squeeze()))
 
-        #outputs = self.trainer.datamodule.denormalizers[0](self.g_ba(imgs))
-        #save_to_disk(outputs, batch_idx, self.hparams.valid_out_pth)
+        if batch_idx % self.hparams.valid_log_freq == 0:
+            self.log_visuals(images=(synth_imgs, outputs),
+                             denorm=self.trainer.datamodule.denormalizers[1],
+                             log_name='Validation visual outputs')
 
-    def log_images(self, inp_A, inp_B, maskA, maskB):
-        merged_out = torch.cat((inp_A, self.fakeB, inp_B, self.fakeA), 0)
-        merged_out = self.trainer.datamodule.denormalizers[0](merged_out)
-        masks = torch.cat((maskA, maskB), 0)
+    def log_visuals(self, images, denorm=None, log_name="Visuals"):
+        out = torch.cat(images, 0)
+        nrow = out.shape[0] // len(images)
 
-        self.trainer.logger.experiment.log_image(log_name='From top to bottom: inpA, fakeB, inpB, fakeA',
-                                                 x = make_grid(merged_out, nrow=self.hparams.batch_size).permute(1, 2, 0).cpu())
+        if denorm:
+            out = denorm(out)
 
-        self.trainer.logger.experiment.log_image(log_name='Masks',
-                                                 x = make_grid(masks, nrow=self.hparams.batch_size).permute(1, 2, 0).cpu())
+        out = make_grid(out, nrow=nrow).permute(1, 2, 0).cpu()
+        self.trainer.logger.experiment.log_image(log_name=log_name, x=out)
 
     def log_losses(self, losses):
         for key, value in losses.items():
