@@ -255,17 +255,3 @@ def save_to_disk(batch, batch_idx, path):
         _filename = os.path.join(path, f'output_{batch_idx}_{i}.jpg')
         _pil_img = to_pil(image.detach().cpu())
         _pil_img.save(_filename, "JPEG")
-
-
-"""def denormalize(x):
-    out = (x + 1) / 2
-    return out.clamp_(0, 1)
-
-def save_imgs(images, out_dir):
-    to_pil = transforms.ToPILImage()
-    for i, image in enumerate(images):
-        _filename = os.path.join(out_dir, f'output_{i}.png')
-        _pil_img = to_pil(denormalize(image.detach().cpu()))#Image.fromarray(np.uint8(denormalize(image)))
-        _pil_img.save(_filename, "JPEG")
-        
-    print(f'{len(images)} properly saved to {out_dir}!')"""

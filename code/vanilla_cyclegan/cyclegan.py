@@ -26,37 +26,33 @@ class CycleGAN(pl.LightningModule):
         super().__init__()
         print("Initializing Vanilla CycleGAN!")
         self.hparams = hparams
-        #self.models = {} #network modules (generators and discriminators)
 
-        init = Initializer(init_type=hparams.init_type, init_gain=0.02)
+        init = Initializer(init_type=hparams.init_type, init_gain=hparams.init_gain)
 
         # Network architecture
-        # Define the two generators, one for each domain:
-        #  - gAtoB: A to B domain translation
-        #  - gBtoA: B to A domain translation
-        self.g_ab = init(generator(in_ch=hparams.inp_ch, out_ch=hparams.out_ch,
-                            ngf=hparams.ngf, net=hparams.netG,
-                            norm=hparams.norm, use_dropout=hparams.use_dropout))
-        self.g_ba = init(generator(in_ch=hparams.inp_ch, out_ch=hparams.out_ch,
-                            ngf=hparams.ngf, net=hparams.netG,
-                            norm=hparams.norm, use_dropout=hparams.use_dropout))
+        # Two generators, one for each domain:
+        #  - g_ab: translation from domain A to domain B
+        #  - g_ba: translation from domain B to domain A
+        self.g_ab = init(generator(in_ch=hparams.inp_ch, out_ch=hparams.out_ch, ngf=hparams.ngf, net=hparams.netG,
+                                   norm=hparams.norm, use_dropout=hparams.use_dropout))
+        self.g_ba = init(generator(in_ch=hparams.inp_ch, out_ch=hparams.out_ch, ngf=hparams.ngf, net=hparams.netG,
+                                   norm=hparams.norm, use_dropout=hparams.use_dropout))
 
-        # Define the discriminators:
-        #  - dA: discriminator for domain A
-        #  - dB: discriminator for domain B
-        self.d_a = init(discriminator(in_ch=hparams.inp_ch, ndf=hparams.ndf,
-                                 net=hparams.netD, ndl=hparams.ndl,
-                                 norm=hparams.norm))
-        self.d_b = init(discriminator(in_ch=hparams.inp_ch, ndf=hparams.ndf,
-                                 net=hparams.netD, ndl=hparams.ndl,
-                                 norm=hparams.norm))
+        # Discriminators:
+        #  - d_a: domain A discriminator
+        #  - d_b: domain B discriminator
+        self.d_a = init(discriminator(in_ch=hparams.inp_ch, ndf=hparams.ndf, net=hparams.netD, ndl=hparams.ndl,
+                                      norm=hparams.norm))
+        self.d_b = init(discriminator(in_ch=hparams.inp_ch, ndf=hparams.ndf, net=hparams.netD, ndl=hparams.ndl,
+                                      norm=hparams.norm))
 
-        if hparams.perceptual > 0:
+        # If we are using perceptual loss. We will need VGG network as a feature extractor
+        if hparams.perceptual > 0: 
             self.vgg = VGGPerceptualLoss().eval()
 
         # ImagePool from where we randomly get generated images in both domains
-        self.pool_fakeA = ImagePool(50)
-        self.pool_fakeB = ImagePool(50)
+        self.pool_fake_a = ImagePool(50)
+        self.pool_fake_b = ImagePool(50)
 
     @staticmethod
     def add_model_specific_args(parent_parser):
@@ -82,10 +78,13 @@ class CycleGAN(pl.LightningModule):
         parser.add_argument('--valid_out_pth', type=str, default="/src/github_repos/a-gan-in-your-hands/valid_outputs/")
         parser.add_argument('--masked', type=bool, default=True)
         parser.add_argument('--fid_dims', type=int, default=2048)
-        parser.add_argument('--perceptual', type=float, default=0.25)
+        parser.add_argument('--perceptual', type=float, default=0.0)
         parser.add_argument('--train_log_freq', type=int, default=25)
         parser.add_argument('--valid_log_freq', type=int, default=10)
-        parser.add_argument('--epoch_decay', type=int, default=5)
+        parser.add_argument('--epoch_decay', type=int, default=3)
+        parser.add_argument('--init_gain', type=float, default=0.02)
+        parser.add_argument('--deterministic', type=bool, default=False)
+        parser.add_argument('--precision', type=int, default=32)
 
         return parser
 
@@ -107,120 +106,119 @@ class CycleGAN(pl.LightningModule):
 
         return [g_opt, da_opt, db_opt], [g_sch, da_sch, db_sch]
 
-    def generator_pass(self, realA, realB, maskA, maskB):
-        _losses = {}
+    def generator_pass(self, real_a, real_b, mask_a, mask_b):
+        losses = {}
 
-        self.fakeA = self.g_ba(realB) # G_BtoA(B)
-        self.fakeB = self.g_ab(realA) # G_AtoB(A)
+        self.fake_a = self.g_ba(real_b) # g_ba(real_b)
+        self.fake_b = self.g_ab(real_a) # g_ab(real_a)
 
-        if self.hparams.masked:
-            self.fakeA = self.fakeA * maskB + realB * (1 - maskB)
-            self.fakeB = self.fakeB * maskA + realA * (1 - maskA)
+        if self.hparams.masked: # make the generators to only focus on the hands
+            self.fake_a = self.fake_a * mask_b + real_b * (1 - mask_b)
+            self.fake_b = self.fake_b * mask_a + real_a * (1 - mask_a)
 
-        recA = self.g_ba(self.fakeB)  # G_BtoA(G_AtoB(A))
-        recB = self.g_ab(self.fakeA)  # G_AtoB(G_BtoA(B))
+        rec_a = self.g_ba(self.fake_b)  # g_ba(g_ab(real_a))
+        rec_b = self.g_ab(self.fake_a)  # g_ab(g_ba(real_b))
 
-        idtA = self.g_ab(realB)  # G_AtoB(B)
-        idtB = self.g_ba(realA)  # G_BtoA(A)
+        idt_a = self.g_ba(real_a)  # g_ba(real_a)
+        idt_b = self.g_ab(real_b)  # g_ab(real_b)
 
-        # Generators must fool the discriminators, so the label is real
-        _losses['gBtoA'] = get_mse_loss(self.d_b(self.fakeA), 'real') # D_A(G_BtoA(B))
-        _losses['gAtoB'] = get_mse_loss(self.d_a(self.fakeB), 'real') # D_B(G_AtoB(A))
+        # Generators must fool the discriminators
+        losses['g_ba'] = get_mse_loss(self.d_a(self.fake_a), 'real') # D_A(G_BtoA(B))
+        losses['g_ab'] = get_mse_loss(self.d_b(self.fake_b), 'real') # D_B(G_AtoB(A))
 
         #Identity losses
         if self.hparams.lambda_idt > 0:
-            _losses['idtA'] = F.l1_loss(idtA, realB) * self.hparams.lambda_b * self.hparams.lambda_idt
-            _losses['idtB'] = F.l1_loss(idtB, realA) * self.hparams.lambda_a * self.hparams.lambda_idt
+            losses['idt_a'] = F.l1_loss(idt_a, real_a) * self.hparams.lambda_a * self.hparams.lambda_idt
+            losses['idt_b'] = F.l1_loss(idt_b, real_b) * self.hparams.lambda_b * self.hparams.lambda_idt
 
         if self.hparams.perceptual > 0:
-            _perceptual_loss = 0
+            perceptual_loss = 0
             with torch.no_grad():
-                _vgg_realA = self.vgg(realA)
-                _vgg_fakeA = self.vgg(self.fakeA)
-                _vgg_recA = self.vgg(recA)
-                _vgg_realB = self.vgg(realB)
-                _vgg_fakeB = self.vgg(self.fakeB)
-                _vgg_recB = self.vgg(recB)
+                vgg_real_a = self.vgg(real_a)
+                vgg_fake_a = self.vgg(self.fake_a)
+                #_vgg_rec_a = self.vgg(rec_a)
+                vgg_real_b = self.vgg(real_b)
+                vgg_fake_b = self.vgg(self.fake_b)
+                #_vgg_rec_b = self.vgg(rec_b)
 
-            _perceptual_loss += torch.nn.functional.l1_loss(_vgg_realA[1], _vgg_recA[1]) * self.hparams.perceptual
-            _perceptual_loss += torch.nn.functional.l1_loss(_vgg_realB[1], _vgg_recB[1]) * self.hparams.perceptual
-            _perceptual_loss += torch.nn.functional.l1_loss(_vgg_fakeA[3], _vgg_realA[3]) * self.hparams.perceptual
-            _perceptual_loss += torch.nn.functional.l1_loss(_vgg_fakeB[3], _vgg_realB[3]) * self.hparams.perceptual
+            #perceptual_loss += torch.nn.functional.l1_loss(vgg_real_a[1], _vgg_rec_a[1]) * self.hparams.perceptual
+            #perceptual_loss += torch.nn.functional.l1_loss(vgg_real_b[1], _vgg_rec_b[1]) * self.hparams.perceptual
+            perceptual_loss += torch.nn.functional.l1_loss(vgg_fake_a[3], vgg_real_a[3]) * self.hparams.perceptual
+            perceptual_loss += torch.nn.functional.l1_loss(vgg_fake_b[3], vgg_real_b[3]) * self.hparams.perceptual
 
-            _losses['per'] = _perceptual_loss
+            losses['per'] = perceptual_loss
 
         # Cycle-consistency losses
-        _losses['cycleAB'] = F.l1_loss(recA, realA) * self.hparams.lambda_a
-        _losses['cycleBA'] = F.l1_loss(recB, realB) * self.hparams.lambda_b
+        losses['cycle_ab'] = F.l1_loss(rec_a, real_a) * self.hparams.lambda_a
+        losses['cycle_ba'] = F.l1_loss(rec_b, real_b) * self.hparams.lambda_b
 
         # Total generator loss
-        _losses['genTotal'] = sum(_losses.values())
+        losses['gen_total'] = sum(losses.values())
 
         # Logging
         if self.trainer.global_step % self.hparams.train_log_freq == 0: # Log images every train_log_freq steps
-            self.log_visuals(images=(realA, self.fakeB, realB, self.fakeA),
+            self.log_visuals(images=(real_a, self.fake_b, real_b, self.fake_a),
                              denorm=self.trainer.datamodule.denormalizers[0],
                              log_name='Training visual outputs')
         
-        self.log_losses(_losses) # Log losses each training step
+        self.log_losses(losses) # Log losses each training step
 
-        return _losses['genTotal']
+        return losses['gen_total']
 
     def discriminator_pass(self, net, real, fake, name):
-        _losses = {}
+        losses = {}
 
-        _losses['real_'+ name] = get_mse_loss(net(real), 'real')
-        _losses['fake_'+ name] = get_mse_loss(net(fake.detach()), 'fake')
-        _losses['tot_'+ name] = (_losses['real_'+ name] + _losses['fake_'+ name]) * 0.5
+        losses['real_'+name] = get_mse_loss(net(real), 'real')
+        losses['fake_'+name] = get_mse_loss(net(fake.detach()), 'fake')
+        losses[name+'_total'] = (losses['real_'+ name] + losses['fake_'+ name]) * 0.5
 
         # Logging
-        self.log_losses(_losses) # Log losses each trainings step
+        self.log_losses(losses) # Log losses each trainings step
 
-        return _losses['tot_'+ name]
+        return losses[name+'_total']
 
     def training_step(self, batch, batch_idx, optimizer_idx):
-        domainA, domainB = batch
-        realA, realB, maskA, maskB = domainA['rgb'], domainB['rgb'], domainA['mask'], domainB['mask']
+        domain_a, domain_b = batch
+        real_a, real_b, mask_a, mask_b = domain_a['rgb'], domain_b['rgb'], domain_a['mask'], domain_b['mask']
 
         # Generators
         if optimizer_idx == 0:
             set_requires_grad([self.d_a, self.d_b], requires_grad= False)
-            return self.generator_pass(realA, realB, maskA, maskB)
+            return self.generator_pass(real_a, real_b, mask_a, mask_b)
 
         # Discriminator A
         if optimizer_idx == 1:
             set_requires_grad(self.d_a, requires_grad=True)
-            fakeB = self.pool_fakeB.query(self.fakeB)
-            return self.discriminator_pass(self.d_a, realB, fakeB, 'dA')
+            fake_a = self.pool_fake_a.query(self.fake_a)
+            return self.discriminator_pass(self.d_a, real_b, fake_a, 'd_a')
 
         # Discriminator B
         if optimizer_idx == 2:
             set_requires_grad(self.d_b, requires_grad=True)
-            fakeA = self.pool_fakeA.query(self.fakeA)
-            return self.discriminator_pass(self.d_b, realA, fakeA, 'dB')
+            fake_b = self.pool_fake_b.query(self.fake_b)
+            return self.discriminator_pass(self.d_b, real_a, fake_b, 'd_b')
 
     def validation_step(self, batch, batch_idx):
-        domainA, domainB = batch
-        real_imgs = domainA['rgb']
-        synth_imgs = domainB['rgb']
+        domain_a, domain_b = batch
+        imgs_a = domain_a['rgb']
+        imgs_b = domain_b['rgb']
 
-        real_imgs_denorm = self.trainer.datamodule.denormalizers[0](real_imgs)
-
-        test = self.inception_model(real_imgs_denorm)[0]
         # Calculate FID metric
-        # Inceltion activations for real images of hands
-        self.inception_real = torch.cat((self.inception_real,
-                                         self.inception_model(real_imgs_denorm)[0].squeeze()))
+        # Get features of images from domain a (in our case: real images of hands)
+        imgs_a_denorm = self.trainer.datamodule.denormalizers[0](imgs_a)
+        self.inception_a = torch.cat((self.inception_a,
+                                      self.inception_model(imgs_a_denorm)[0].squeeze()))
 
-        # Generator forward step to translate synthetic into real
-        outputs = self.g_ba(synth_imgs)
-        outputs_denorm = self.trainer.datamodule.denormalizers[1](outputs)
+        # Generator forward step to translate images from domain b to domain a (synthetic hands to real hands)
+        imgs_a_fake = self.g_ba(imgs_b)
+        imgs_a_fake_denorm = self.trainer.datamodule.denormalizers[1](imgs_a_fake)
         # Inception activations for generated images
-        self.inception_gen = torch.cat((self.inception_gen,
-                                        self.inception_model(outputs_denorm)[0].squeeze()))
+        self.inception_a_fake = torch.cat((self.inception_a_fake,
+                                           self.inception_model(imgs_a_fake_denorm)[0].squeeze()))
 
+        # Logging
         if batch_idx % self.hparams.valid_log_freq == 0:
-            self.log_visuals(images=(synth_imgs, outputs),
+            self.log_visuals(images=(imgs_b, imgs_a_fake),
                              denorm=self.trainer.datamodule.denormalizers[1],
                              log_name='Validation visual outputs')
 
@@ -240,8 +238,8 @@ class CycleGAN(pl.LightningModule):
 
 class ValidationCallback(Callback):
     def on_validation_start(self, trainer, pl_module):
-        pl_module.inception_real = torch.empty(0, device='cuda')
-        pl_module.inception_gen = torch.empty(0, device='cuda')
+        pl_module.inception_a = torch.empty(0, device='cuda')
+        pl_module.inception_a_fake = torch.empty(0, device='cuda')
 
         _block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[pl_module.hparams.fid_dims]
         pl_module.inception_model = InceptionV3([_block_idx])
@@ -249,6 +247,6 @@ class ValidationCallback(Callback):
         pl_module.inception_model.eval()
 
     def on_validation_end(self, trainer, pl_module):
-        fid_score = fid(pl_module.inception_real.cpu().data.numpy(),
-                        pl_module.inception_gen.cpu().data.numpy())
+        fid_score = fid(pl_module.inception_a.cpu().data.numpy(),
+                        pl_module.inception_a_fake.cpu().data.numpy())
         trainer.logger.experiment.log_metric(log_name = 'FID', x = fid_score)
