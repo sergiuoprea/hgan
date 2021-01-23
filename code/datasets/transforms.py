@@ -98,8 +98,8 @@ class MaskedRandomCrop:
                                   cv2.BORDER_CONSTANT, value=[0, 0, 0])
 
         # Erode the mask to ensure the crop center is not in the hand border
-        #mask = cv2.erode(mask, self.kernel, iterations=2)
-        coords = np.argwhere(mask==255) # hand is defined by white pixels
+        mask_eroded = cv2.erode(mask, self.kernel, iterations=3)
+        coords = np.argwhere(mask_eroded==255) # hand is defined by white pixels
         center = random.choice(coords) # we get a random centroid
 
         # Calculating the crop center
