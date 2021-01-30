@@ -1,5 +1,5 @@
 import pytorch_lightning as pl
-from datasets.transforms import CenterCrop, MaskedRandomCrop, Normalize, ToTensor, Compose, Denormalize
+from datasets.transforms import CenterCrop, MaskedRandomCrop, Normalize, ToTensor, Compose, CentroidCrop, Denormalize
 from torch.utils.data import DataLoader
 from PIL import Image
 import torch.utils.data
@@ -106,15 +106,25 @@ class RealHandsDataModule(pl.LightningDataModule):
             mean, std = calculate_mean_and_std(dataloader)
 
     def setup(self):
-        ops = []
+        train_ops = []
+        valid_ops = []
 
+        # Image cropping for the train set
         if self.hparams.random_crop:
-            ops.append(MaskedRandomCrop(self.hparams.crop_size))
+            train_ops.append(MaskedRandomCrop(self.hparams.train_inp_size))
         else:
-            ops.append(CenterCrop(self.hparams.crop_size))
+            train_ops.append(CenterCrop(self.hparams.train_inp_size))
 
-        ops.append(ToTensor())
-        ops.append(Normalize(mean= self.mean, std= self.std))
+        # Image cropping for the valid set
+        valid_ops.append(CentroidCrop(self.hparams.valid_inp_size))
+
+        # ToTensor
+        train_ops.append(ToTensor())
+        valid_ops.append(ToTensor())
+
+        # Normalize
+        train_ops.append(Normalize(mean= self.mean, std= self.std))
+        valid_ops.append(Normalize(mean= self.mean, std= self.std))
 
         # Data split into train, valid and test sets.
         indices = list(range(len(self.data)))
@@ -122,9 +132,9 @@ class RealHandsDataModule(pl.LightningDataModule):
         valid_dataset = Subset(self.data, indices[self.hparams.test_size:self.hparams.test_size + self.hparams.valid_size])
         train_dataset = Subset(self.data, indices[self.hparams.test_size + self.hparams.valid_size:])
 
-        self.datasets['train'] = RealHandsDataset(train_dataset, Compose(ops))
-        self.datasets['valid'] = RealHandsDataset(valid_dataset, Compose(ops[1:]))
-        self.datasets['test'] = RealHandsDataset(test_dataset, Compose(ops))
+        self.datasets['train'] = RealHandsDataset(train_dataset, Compose(train_ops))
+        self.datasets['valid'] = RealHandsDataset(valid_dataset, Compose(valid_ops))
+        self.datasets['test'] = RealHandsDataset(test_dataset, Compose(valid_ops))
         self.datasets['mean_std'] = RealHandsDataset(self.data, ToTensor())
 
     def get_dataset(self, mode='train'):
