@@ -1,7 +1,8 @@
 import torch
+import torch.nn as nn
 import torchvision
 
-class Vgg16(torch.nn.Module):
+class Vgg16(nn.Module):
     def __init__(self, requires_grad=False, resize=False):
         super(Vgg16, self).__init__()
         vgg_pretrained_features = torchvision.models.vgg16(pretrained=True).features
@@ -17,20 +18,20 @@ class Vgg16(torch.nn.Module):
             self.slice3.add_module(str(x), vgg_pretrained_features[x])
         for x in range(16, 23):
             self.slice4.add_module(str(x), vgg_pretrained_features[x])
-        
+
         if not requires_grad:
             for param in self.parameters():
                 param.requires_grad = False
 
-        self.mean = torch.nn.Parameter(torch.tensor([0.485, 0.456, 0.406]).view(1,3,1,1))
-        self.std = torch.nn.Parameter(torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1))
+        self.mean = torch.nn.Parameter(torch.Tensor([0.485, 0.456, 0.406]).view(1,3,1,1))
+        self.std = torch.nn.Parameter(torch.Tensor([0.229, 0.224, 0.225]).view(1,3,1,1))
         self.resize = resize
         self.transform = torch.nn.functional.interpolate
 
     def forward(self, inp):
         if inp.shape[1] != 3:
             inp = inp.repeat(1, 3, 1, 1)
-        
+
         inp = (inp-self.mean) / self.std
 
         if self.resize:

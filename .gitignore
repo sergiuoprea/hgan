@@ -128,5 +128,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Neptune config file with credentials
+# Neptune stuff
 neptune_cfg.py
+code/Untitled/
+
+# Checkpoints folder
+code/checkpoints

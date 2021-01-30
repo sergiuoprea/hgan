@@ -1,7 +1,8 @@
 import pytorch_lightning as pl
-from vanilla_cyclegan.cyclegan import CycleGAN
-from vanilla_cyclegan.cyclegan import ValidationCallback
 from pytorch_lightning.loggers.neptune import NeptuneLogger
+from pytorch_lightning.callbacks import ModelCheckpoint
+from models.handgan import HandGAN
+from models.handgan import ValidationCallback, PrintModels
 import neptune_cfg
 from datasets.dataloader import MultipleDataModule
 from datasets.synthhands import SynthHandsDataModule
@@ -14,7 +15,7 @@ parser = ArgumentParser()
 
 if __name__ == '__main__':
     parser = MultipleDataModule.add_model_specific_args(parser, DATASETS)
-    parser = CycleGAN.add_model_specific_args(parser)
+    parser = HandGAN.add_model_specific_args(parser)
     args = parser.parse_args()
 
     # Loggers
@@ -25,17 +26,23 @@ if __name__ == '__main__':
     dm.prepare_data()
     dm.setup()
 
+    # Model Checkpoint callback
+    checkpoint_callback = ModelCheckpoint(monitor='FID', dirpath='./checkpoints/' + args.exp_name,
+                                          filename=args.exp_name + '_handgan-{epoch:02d}-{FID:.2f}',
+                                          save_top_k=3,
+                                          mode='min')
+
     # CycleGAN instance
-    net = CycleGAN(hparams=args)
+    net = HandGAN(hparams=args)
 
     # Set seed and deterministic flag in the Trainer to True if a deterministic behavior is expected
-    if args.deterministic:
+    if args.be_deterministic:
         pl.seed_everything(23)
 
     # Trainer instance
-    trainer = pl.Trainer(gpus=1, precision=args.precision, logger=logger, val_check_interval=0.10,
-                         deterministic=args.deterministic, callbacks=[ValidationCallback()],
-                         limit_val_batches=100, limit_train_batches=8000)
+    trainer = pl.Trainer(gpus=1, precision=args.fp_precision, logger=logger, val_check_interval=args.valid_interval,
+                         deterministic=args.be_deterministic, callbacks=[ValidationCallback(), PrintModels(), checkpoint_callback],
+                         limit_val_batches=150, limit_train_batches=5000)
 
     # Train the mode
     trainer.fit(net, dm)

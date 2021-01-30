@@ -240,14 +240,6 @@ def load_model(nets, optimizers, start_epoch, start_iter, dir_path, device):
 
     print(f'Models {nets.keys()} and optimizers {optimizers.keys()} were initilized successfully with weights {_chk_file}.')
 
-def get_mse_loss(output, label):
-    if label.lower() == 'real':
-        target = torch.ones_like(output, requires_grad=False)
-    else:
-        target = torch.zeros_like(output, requires_grad=False)
-
-    return F.mse_loss(output, target)
-
 def save_to_disk(batch, batch_idx, path):
     to_pil = transforms.ToPILImage()
 
