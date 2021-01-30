@@ -1,6 +1,7 @@
 import pytorch_lightning as pl
-from datasets.utils import ConcatDataset
 from torch.utils.data import DataLoader
+from datasets.utils import ConcatDataset
+from datasets.transforms import Denormalize
 
 from datasets.realhands import RealHandsDataModule
 from datasets.synthhands import SynthHandsDataModule
@@ -18,19 +19,21 @@ class MultipleDataModule(pl.LightningDataModule):
         self.hparams = hparams
         self.datasets = datasets
         self.data = {}
-        self.denormalizers = []
+        self.denormalize = Denormalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
 
     @staticmethod
     def add_model_specific_args(parent_parser, datasets):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--train_bs', type=int, default=16)
-        parser.add_argument('--valid_bs', type=int, default=4)
-        parser.add_argument('--num_workers', type=int, default=8)
-        parser.add_argument('--valid_size', type=int, default=1000)
-        parser.add_argument('--test_size', type=int, default=500)
-        parser.add_argument('--crop_size', type=int, default=64)
-        parser.add_argument('--shuffle', type=bool, default=True)
-        parser.add_argument('--random_crop', type=bool, default=True)
+        parser.add_argument('--train_bs', type=int, default=16, help='training batch size')
+        parser.add_argument('--valid_bs', type=int, default=4, help='validation batch size')
+        parser.add_argument('--test_bs', type=int, default=4, help='test batch size')
+        parser.add_argument('--num_workers', type=int, default=8, help='# of workers for the dataloader')
+        parser.add_argument('--valid_size', type=int, default=1000, help='validation set size')
+        parser.add_argument('--test_size', type=int, default=500, help='test set size')
+        parser.add_argument('--train_inp_size', type=int, default=128, help='size of input images for training')
+        parser.add_argument('--valid_inp_size', type=int, default=256, help='size of input images for validation')
+        parser.add_argument('--shuffle', type=bool, default=True, help='if True, data will be shuffled')
+        parser.add_argument('--random_crop', type=bool, default=True, help='if True, random crop the images (for training)')
 
         # Take into account the arguments of each dataset
         for dataset in datasets:
@@ -53,7 +56,6 @@ class MultipleDataModule(pl.LightningDataModule):
             _train.append(_datamodule.get_dataset('train'))
             _valid.append(_datamodule.get_dataset('valid'))
             _test.append(_datamodule.get_dataset('test'))
-            self.denormalizers.append(_datamodule.get_denormalizer())
 
         self.data['train'] = ConcatDataset(_train)
         self.data['valid'] = ConcatDataset(_valid)
@@ -71,5 +73,5 @@ class MultipleDataModule(pl.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(dataset=self.data['test'],
-                          batch_size=self.hparams.batch_size,
+                          batch_size=self.hparams.test_bs,
                           num_workers=self.hparams.num_workers)
