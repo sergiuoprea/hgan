@@ -1,5 +1,6 @@
 import torch.nn.functional as F
 from torchvision import transforms
+from PIL import Image
 import torch
 import cv2
 import random
@@ -19,6 +20,61 @@ class Compose:
         for transform in self.transforms:
             sample = transform(sample)
         return sample
+
+class Resize:
+    def __init__(self, size, interpolation=Image.BILINEAR):
+        self.operation = transforms.Resize(size=(size, size), interpolation=interpolation)
+
+    def __call__(self, sample):
+        image, mask = sample['rgb'], sample['mask']
+
+        image = self.operation(image)
+        mask = self.operation(mask)
+
+        return {'rgb': image, 'mask': mask}
+
+class CentroidCrop:
+    """
+    Crops the given image and mask at centroid computed from a binary mask.
+    It expects a dict as input containing the image and its corresponding mask
+    (both np.ndarray). This function only considers squared cropping.
+
+    Args:
+        crop_size (int): defines the height and width of the output image.
+        thresh ([int, int]): defines a threshold to manually adjust the centroid position
+                             if necessary.
+
+        Returns a dictionary containing the cropped image and its corresponding mask.
+    """
+    def __init__(self, crop_size, thresh=[20, 100]):
+        self.crop_size = crop_size
+        self.thresh = thresh
+
+    def __call__(self, sample):
+        image, mask = sample['rgb'], sample['mask']
+
+        # Pad image and mask
+        border = self.crop_size // 2 + max(self.thresh)
+        image = cv2.copyMakeBorder(image, border, border, border, border,
+                                   cv2.BORDER_CONSTANT, value=[255, 255, 255])
+        mask = cv2.copyMakeBorder(mask, border, border, border, border,
+                                  cv2.BORDER_CONSTANT, value=[0, 0, 0])
+
+        # Calculate moments for the binary mask
+        m = cv2.moments(mask)
+        # Calculate the x, y coordinates of center
+        c_x = int(m["m10"] / m["m00"])
+        c_y = int(m["m01"] / m["m00"])
+
+        x = c_x - self.crop_size // 2 + self.thresh[0]
+        y = c_y - self.crop_size // 2 - self.thresh[1]
+
+        # Cropping the image
+        image = image[y:y+self.crop_size, x:x+self.crop_size]
+        mask = mask[y:y+self.crop_size, x:x+self.crop_size]
+
+        return {'rgb': image, 'mask': mask}
+
 
 class CenterCrop:
     """
