@@ -24,12 +24,12 @@ class MultipleDataModule(pl.LightningDataModule):
     @staticmethod
     def add_model_specific_args(parent_parser, datasets):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--train_bs', type=int, default=16, help='training batch size')
+        parser.add_argument('--train_bs', type=int, default=8, help='training batch size')
         parser.add_argument('--valid_bs', type=int, default=4, help='validation batch size')
         parser.add_argument('--test_bs', type=int, default=4, help='test batch size')
         parser.add_argument('--num_workers', type=int, default=8, help='# of workers for the dataloader')
         parser.add_argument('--valid_size', type=int, default=1000, help='validation set size')
-        parser.add_argument('--test_size', type=int, default=500, help='test set size')
+        parser.add_argument('--test_size', type=int, default=2000, help='test set size')
         parser.add_argument('--train_inp_size', type=int, default=128, help='size of input images for training')
         parser.add_argument('--valid_inp_size', type=int, default=256, help='size of input images for validation')
         parser.add_argument('--shuffle', type=bool, default=True, help='if True, data will be shuffled')
