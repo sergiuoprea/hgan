@@ -240,8 +240,11 @@ def load_model(nets, optimizers, start_epoch, start_iter, dir_path, device):
 
     print(f'Models {nets.keys()} and optimizers {optimizers.keys()} were initilized successfully with weights {_chk_file}.')
 
-def save_to_disk(batch, batch_idx, path):
+def save_to_disk(batch, batch_idx, path, denorm):
     to_pil = transforms.ToPILImage()
+
+    if denorm:
+        batch = denorm(batch)
 
     for i, image in enumerate(batch):
         _filename = os.path.join(path, f'output_{batch_idx}_{i}.jpg')
