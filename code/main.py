@@ -36,12 +36,12 @@ if __name__ == '__main__':
     net = HandGAN(hparams=args)
 
     # Set seed and deterministic flag in the Trainer to True if a deterministic behavior is expected
-    if args.be_deterministic:
+    if args.deterministic:
         pl.seed_everything(23)
 
     # Trainer instance
-    trainer = pl.Trainer(gpus=1, precision=args.fp_precision, logger=logger, val_check_interval=args.valid_interval,
-                         deterministic=args.be_deterministic, callbacks=[ValidationCallback(), PrintModels(), checkpoint_callback],
+    trainer = pl.Trainer(gpus=args.gpus, precision=args.fp_precision, logger=logger, val_check_interval=args.valid_interval,
+                         deterministic=args.deterministic, callbacks=[ValidationCallback(), PrintModels(), checkpoint_callback],
                          limit_val_batches=150, limit_train_batches=5000)
 
     # Train the mode

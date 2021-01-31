@@ -77,10 +77,10 @@ class HandGAN(pl.LightningModule):
         parser.add_argument('--ndf', type=int, default=64, help='# of discrim filters in the first conv layer')
         parser.add_argument('--ndl', type=int, default=3, help='# of donwsampling layers in the discriminator. Only for [patch | pixel] discriminators')
         parser.add_argument('--netD', type=str, default='perceptual', help='specify discriminator architecture [patch | pixel | perceptual]')
-        parser.add_argument('--netG', type=str, default='resnet_9blocks', help='specify generator architecture [resnet_9blocks | resnet_6blocks | resnet_4blocks]')
+        parser.add_argument('--netG', type=str, default='resnet_6blocks', help='specify generator architecture [resnet_9blocks | resnet_6blocks | resnet_4blocks]')
         parser.add_argument('--norm', type=str, default='batch', help='instance normalization or batch normalization [instance | batch | none]')
         parser.add_argument('--use_dropout', type=bool, default=True, help='use dropout for the generator')
-        parser.add_argument('--init_type', type=str, default='normal', help='network initialization [normal | xavier | kaiming | orthogonal]')
+        parser.add_argument('--init_type', type=str, default='xavier', help='network initialization [normal | xavier | kaiming | orthogonal]')
         parser.add_argument('--init_gain', type=float, default=0.02)
         #parser.add_argument('--lr_epoch_decay', type=int, default=3, help='learning rate decay for the LR scheduler')
         parser.add_argument('--glr', type=float, default=0.0002, help='initial learning rate for generator (adam optimizer)')
@@ -91,12 +91,13 @@ class HandGAN(pl.LightningModule):
         parser.add_argument('--use_masks', type=bool, default=True, help='generator output is masked to only focus the loss on the hands')
         parser.add_argument('--log_freq_train', type=int, default=25, help='frequency to log training visuals (each n batches)')
         parser.add_argument('--log_freq_valid', type=int, default=10, help='frequency to log validation visuales (each n batches)')
-        parser.add_argument('--be_deterministic', type=bool, default=True, help='make the model deterministic.')
+        parser.add_argument('--deterministic', action='store_true', help='make the model deterministic.')
         parser.add_argument('--fp_precision', type=int, default=32, help='floating point precision. use 16 to handle larger batch sizes')
         parser.add_argument('--valid_interval', type=float, default=0.2, help='validation epoch interval. This values is a percentage')
         parser.add_argument('--pool_size', type=int, default=50, help='# of generated images stored in the pool')
         parser.add_argument('--output_scales', type=str, default='16,8,4', help='output sizes for the multi-scale perceptual discriminator')
         parser.add_argument('--exp_name', type=str, default='alpha', help='prefix name to indetify the current experiment when saving the checkpoints')
+        parser.add_argument('--gpus', nargs="+", type=int, default=[0], help='select the GPU by its index')
 
         return parser
 
