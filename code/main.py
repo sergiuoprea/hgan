@@ -1,14 +1,22 @@
+# Pytorch lightning imports
 import pytorch_lightning as pl
 from pytorch_lightning.loggers.neptune import NeptuneLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
+
+# Model
 from models.handgan import HandGAN
-from models.handgan import ValidationCallback, PrintModels
-import neptune_cfg
+
+# Callbacks
+from models.handgan import ValidationCallback, PrintModels, TestCallback
+
+# Dataloader
 from datasets.dataloader import MultipleDataModule
-from datasets.synthhands import SynthHandsDataModule
+
+# Other imports:
+# Neptune credentials
+import neptune_cfg
 
 from argparse import ArgumentParser
-import torch
 
 DATASETS = ["real_hands", "synth_hands"]
 parser = ArgumentParser()
@@ -19,8 +27,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Loggers
-    logger = NeptuneLogger(api_key=neptune_cfg.key, project_name=neptune_cfg.project, params=vars(args),
-                           experiment_name=args.exp_name, experiment_id=args.exp_id)
+    logger = NeptuneLogger(api_key=neptune_cfg.key, project_name=neptune_cfg.project,
+                           params=vars(args), experiment_name=args.exp_name)
 
     # Datamodule
     dm = MultipleDataModule(DATASETS, args)
@@ -28,12 +36,12 @@ if __name__ == '__main__':
     dm.setup()
 
     # Model Checkpoint callback
-    checkpoint_callback = ModelCheckpoint(monitor='FID', dirpath='./checkpoints/' + args.exp_name,
+    checkpoint_callback = ModelCheckpoint(monitor='FID', dirpath=args.chk_dir + args.exp_name,
                                           filename=args.exp_name + '_handgan-{epoch:02d}-{FID:.2f}',
-                                          save_top_k=3,
+                                          save_top_k=2,
                                           mode='min')
 
-    # CycleGAN instance
+    # Model instance
     net = HandGAN(hparams=args)
 
     # Set seed and deterministic flag in the Trainer to True if a deterministic behavior is expected
@@ -42,11 +50,16 @@ if __name__ == '__main__':
 
     # Trainer instance
     trainer = pl.Trainer(gpus=args.gpus, precision=args.fp_precision, logger=logger, val_check_interval=args.valid_interval,
-                         deterministic=args.deterministic, callbacks=[ValidationCallback(), PrintModels(), checkpoint_callback],
-                         limit_val_batches=150, limit_train_batches=5000)
+                         deterministic=args.deterministic, callbacks=[ValidationCallback(), PrintModels(), TestCallback(), checkpoint_callback],
+                         limit_val_batches=1.0, limit_train_batches=1.0, max_epochs=args.max_epochs, accumulate_grad_batches=1)
 
-    # Train the mode
+    # Training step
     trainer.fit(net, dm)
+
+    # Test step
+    # Load the best model
+    net = HandGAN.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
+    trainer.test(net, dm.test_dataloader())
 
     # Stop Neptune logging
     logger.experiment.stop()
