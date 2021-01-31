@@ -9,7 +9,7 @@ from pytorch_lightning.callbacks import Callback
 ## Basic Python imports
 import os
 from itertools import chain
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 
 ## Model-specific imports
 from models.discriminator import discriminator
@@ -20,6 +20,7 @@ import models.utils as mutils
 
 ## Metrics
 from metrics.fid import fid
+from torch_fidelity import calculate_metrics
 
 ## Criterions
 from loss.losses import DiscriminatorLoss
@@ -30,6 +31,12 @@ class HandGAN(pl.LightningModule):
 
         print("Initializing our HandGAN model...")
 
+        # Workaround from https://github.com/PyTorchLightning/pytorch-lightning/issues/3998
+        # Happens when loading model from checkpoints. save_hyperparameters() not working
+        if isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
+
+        #self.save_hyperparameters()
         self.hparams = hparams
 
         # Used to initialize the networks
@@ -99,6 +106,8 @@ class HandGAN(pl.LightningModule):
         parser.add_argument('--exp_name', type=str, default='alpha', help='prefix name to indetify the current experiment when saving the checkpoints')
         parser.add_argument('--exp_id', type=str, default='experiment_1', help='id name to identify the experiment in the Neptune logger experiment list')
         parser.add_argument('--gpus', nargs="+", type=int, default=[0], help='select the GPU by its index')
+        parser.add_argument('--max_epochs', type=int, default=5, help='# of maximum epochs for training')
+        parser.add_argument('--chk_dir', type=str, default='./checkpoints/', help='directory were checkpoints will be saved')
 
         return parser
 
@@ -223,6 +232,21 @@ class HandGAN(pl.LightningModule):
                              denorm=self.trainer.datamodule.denormalize,
                              log_name='Validation visual outputs')
 
+    def test_step(self, batch, batch_idx):
+        domain_a, domain_b = batch
+        imgs_a = domain_a['rgb']
+        imgs_b = domain_b['rgb']
+
+        # Real imgs
+        mutils.save_to_disk(batch=imgs_a, batch_idx=batch_idx, path=self.test_dirs['rea'], denorm=self.trainer.datamodule.denormalize)
+
+        # Synthetic imgs
+        mutils.save_to_disk(batch=imgs_b, batch_idx=batch_idx, path=self.test_dirs['syn'], denorm=self.trainer.datamodule.denormalize)
+
+        # Generated imgs
+        imgs_a_fake = self.g_ba(imgs_b)
+        mutils.save_to_disk(batch=imgs_a_fake, batch_idx=batch_idx, path=self.test_dirs['gen'], denorm=self.trainer.datamodule.denormalize)
+
     def log_visuals(self, images, denorm=None, log_name="Visuals"):
         out = torch.cat(images, 0)
         nrow = out.shape[0] // len(images)
@@ -246,6 +270,26 @@ class ValidationCallback(Callback):
         fid_score = fid(pl_module.inception_a_real.cpu().data.numpy(),
                         pl_module.inception_a_fake.cpu().data.numpy())
         pl_module.log('FID', fid_score, prog_bar=True, logger=True)
+
+class TestCallback(Callback):
+    def on_test_start(self, trainer, pl_module):
+        ## Prepare dirs to save test images
+        pl_module.test_dirs = {}
+        # pl_module.hparams.chk_dir
+        root_dir = os.path.join('./checkpoints/', pl_module.hparams.exp_name)
+        pl_module.test_dirs['rea'] = os.path.join(root_dir,'test_imgs','real')
+        pl_module.test_dirs['syn'] = os.path.join(root_dir,'test_imgs','synthetic')
+        pl_module.test_dirs['gen'] = os.path.join(root_dir,'test_imgs','generated')
+
+        for _, value in pl_module.test_dirs.items():
+            if not os.path.exists(value):
+                os.makedirs(value)
+
+    def on_test_end(self, trainer, pl_module):
+        metrics_dict = calculate_metrics(pl_module.test_dirs['gen'], pl_module.test_dirs['rea'], cuda=True, isc=True,
+                                         fid=True, kid=True, kid_subset_size=pl_module.hparams.test_size//10, verbose=False)
+        trainer.logger.log_metrics(metrics_dict)
+        print(metrics_dict)
 
 class PrintModels(Callback):
     def setup(self, trainer, pl_module, stage):
