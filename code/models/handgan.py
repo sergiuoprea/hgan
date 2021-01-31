@@ -97,6 +97,7 @@ class HandGAN(pl.LightningModule):
         parser.add_argument('--pool_size', type=int, default=50, help='# of generated images stored in the pool')
         parser.add_argument('--output_scales', type=str, default='16,8,4', help='output sizes for the multi-scale perceptual discriminator')
         parser.add_argument('--exp_name', type=str, default='alpha', help='prefix name to indetify the current experiment when saving the checkpoints')
+        parser.add_argument('--exp_id', type=str, default='experiment_1', help='id name to identify the experiment in the Neptune logger experiment list')
         parser.add_argument('--gpus', nargs="+", type=int, default=[0], help='select the GPU by its index')
 
         return parser

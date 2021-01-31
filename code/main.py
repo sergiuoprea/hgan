@@ -19,7 +19,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Loggers
-    logger = NeptuneLogger(api_key=neptune_cfg.key, project_name=neptune_cfg.project, params=vars(args))
+    logger = NeptuneLogger(api_key=neptune_cfg.key, project_name=neptune_cfg.project, params=vars(args),
+                           experiment_name=args.exp_name, experiment_id=args.exp_id)
 
     # Datamodule
     dm = MultipleDataModule(DATASETS, args)
