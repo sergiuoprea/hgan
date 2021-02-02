@@ -16,6 +16,7 @@ from models.discriminator import discriminator
 from models.generator import generator
 from models.inception import InceptionV3
 from models.vgg import Vgg16
+from models.silnet import SilNet
 import models.utils as mutils
 
 ## Metrics
@@ -61,6 +62,12 @@ class HandGAN(pl.LightningModule):
             block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
             self.inception_net = InceptionV3([block_idx]).eval()
 
+        if hparams.ganerated:
+            model = SilNet.load_from_checkpoint("./weights/silnet_pretrained.ckpt")
+            mutils.set_requires_grad(model, requires_grad=False)
+            self.silnet = model.unet.eval()
+            
+
         # ImagePool from where we randomly get generated images in both domains
         self.fake_a_pool = mutils.ImagePool(hparams.pool_size)
         self.fake_b_pool = mutils.ImagePool(hparams.pool_size)
@@ -71,6 +78,9 @@ class HandGAN(pl.LightningModule):
 
         if hparams.lambda_idt > 0.0:
             self.crit_idt = torch.nn.L1Loss()
+
+        if hparams.ganerated:
+            self.crit_geom = torch.nn.BCEWithLogitsLoss()
 
     @staticmethod
     def add_model_specific_args(parent_parser):
@@ -106,8 +116,9 @@ class HandGAN(pl.LightningModule):
         parser.add_argument('--exp_name', type=str, default='alpha', help='prefix name to indetify the current experiment when saving the checkpoints')
         parser.add_argument('--exp_id', type=str, default='experiment_1', help='id name to identify the experiment in the Neptune logger experiment list')
         parser.add_argument('--gpus', nargs="+", type=int, default=[0], help='select the GPU by its index')
-        parser.add_argument('--max_epochs', type=int, default=5, help='# of maximum epochs for training')
+        parser.add_argument('--max_epochs', type=int, default=10, help='# of maximum epochs for training')
         parser.add_argument('--chk_dir', type=str, default='./checkpoints/', help='directory were checkpoints will be saved')
+        parser.add_argument('--ganerated', action='store_true', help='use SilNet used in the GANerated hands model as a geometry consistency loss')
 
         return parser
 
@@ -135,7 +146,7 @@ class HandGAN(pl.LightningModule):
         self.fake_a = self.g_ba(real_b) # g_ba(real_b)
         self.fake_b = self.g_ab(real_a) # g_ab(real_a)
 
-        if self.hparams.use_masks: # mask generations to focus on the hands
+        if self.hparams.use_masks and not self.hparams.ganerated: # mask generations to focus on the hands
             self.fake_a = self.fake_a * mask_b + real_b * (1 - mask_b)
             self.fake_b = self.fake_b * mask_a + real_a * (1 - mask_a)
 
@@ -163,6 +174,12 @@ class HandGAN(pl.LightningModule):
         # Cycle-consistency losses
         losses['cycle_ab'] = self.crit_cycle(rec_a, real_a) * self.hparams.lambda_a
         losses['cycle_ba'] = self.crit_cycle(rec_b, real_b) * self.hparams.lambda_b
+
+        # Geometrically consistent loss (GANerated Hands)
+        if self.hparams.ganerated:
+            losses['geom_ab'] = self.crit_geom(self.silnet(self.fake_b), mask_a)
+            losses['geom_ba'] = self.crit_geom(self.silnet(self.fake_a), mask_b)
+
 
         # Total generator loss
         losses['gen_total'] = sum(losses.values())
