@@ -133,7 +133,7 @@ class SynthHandsDataModule(pl.LightningDataModule):
         self.datasets['train'] = SynthHandsDataset(train_dataset, Compose(train_ops))
         self.datasets['valid'] = SynthHandsDataset(valid_dataset, Compose(valid_ops))
         self.datasets['test'] = SynthHandsDataset(test_dataset, Compose(valid_ops))
-        self.datasets['mean_std'] = SynthHandsDataset(random.sample(self.data, 20000), ToTensor())
+        # self.datasets['mean_std'] = SynthHandsDataset(random.sample(self.data, 20000), ToTensor())
 
     def get_dataset(self, mode='train'):
         return self.datasets[mode]
