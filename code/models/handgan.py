@@ -255,11 +255,13 @@ class HandGAN(pl.LightningModule):
             out = denorm(out)
 
         out = make_grid(out, nrow=nrow).permute(1, 2, 0).cpu()
-        self.trainer.logger.experiment.log_image(log_name=log_name, x=out)
+        if self.trainer.logger:
+            self.trainer.logger.experiment.log_image(log_name=log_name, x=out)
 
     def log_losses(self, losses):
-        for key, value in losses.items():
-            self.trainer.logger.experiment.log_metric(log_name='Loss '+key, x = value)
+        if self.trainer.logger:
+            for key, value in losses.items():
+                self.trainer.logger.experiment.log_metric(log_name='Loss '+key, x = value)
 
 class ValidationCallback(Callback):
     def on_validation_epoch_start(self, trainer, pl_module):
