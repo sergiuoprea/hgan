@@ -12,10 +12,6 @@ from models.handgan import ValidationCallback, PrintModels, TestCallback
 # Dataloader
 from datasets.dataloader import MultipleDataModule
 
-# Other imports:
-# Neptune credentials
-import neptune_cfg
-
 from argparse import ArgumentParser
 
 DATASETS = ["real_hands", "synth_hands"]
@@ -27,8 +23,16 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Loggers
-    logger = NeptuneLogger(api_key=neptune_cfg.key, project_name=neptune_cfg.project,
-                           params=vars(args), experiment_name=args.exp_name)
+    try:
+        # Other imports:
+        # Neptune credentials
+        import neptune_cfg
+
+        logger = NeptuneLogger(api_key=neptune_cfg.key, project_name=neptune_cfg.project,
+                               params=vars(args), experiment_name=args.exp_name)
+    except ImportError: # no neptune credentials, no logger
+        logger = False
+
 
     # Datamodule
     dm = MultipleDataModule(DATASETS, args)

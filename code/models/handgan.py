@@ -293,9 +293,10 @@ class TestCallback(Callback):
 
 class PrintModels(Callback):
     def setup(self, trainer, pl_module, stage):
-        # Log generators' and discriminators' model layers
-        for chunk in str(pl_module.g_ab).split('\n'):
-            trainer.logger.experiment.log_text('Generators_arch', str(chunk))
+        if trainer.logger:
+            # Log generators' and discriminators' model layers
+            for chunk in str(pl_module.g_ab).split('\n'):
+                trainer.logger.experiment.log_text('Generators_arch', str(chunk))
 
-        for chunk in str(pl_module.d_a).split('\n'):
-            trainer.logger.experiment.log_text('Discriminators_arch', str(chunk))
+            for chunk in str(pl_module.d_a).split('\n'):
+                trainer.logger.experiment.log_text('Discriminators_arch', str(chunk))
