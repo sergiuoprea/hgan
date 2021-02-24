@@ -118,7 +118,7 @@ class HandGAN(pl.LightningModule):
         parser.add_argument('--gpus', nargs="+", type=int, default=[0], help='select the GPU by its index')
         parser.add_argument('--max_epochs', type=int, default=10, help='# of maximum epochs for training')
         parser.add_argument('--chk_dir', type=str, default='./checkpoints/', help='directory were checkpoints will be saved')
-        parser.add_argument('--ganerated', action='store_true', help='use SilNet used in the GANerated hands model as a geometry consistency loss')
+        parser.add_argument('--ganerated', dest='ganerated', action='store_true', help='use SilNet used in the GANerated hands model as a geometry consistency loss')
 
         return parser
 

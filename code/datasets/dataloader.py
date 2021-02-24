@@ -5,11 +5,13 @@ from datasets.transforms import Denormalize
 
 from datasets.realhands import RealHandsDataModule
 from datasets.synthhands import SynthHandsDataModule
+from datasets.mit_indoor import MitIndoorDataModule
 
 from argparse import ArgumentParser
 
 DATAMODULES = {'real_hands'    : RealHandsDataModule,
-               'synth_hands'   : SynthHandsDataModule}
+               'synth_hands'   : SynthHandsDataModule,
+               'mit_indoor'    : MitIndoorDataModule}
 
 class MultipleDataModule(pl.LightningDataModule):
     """
