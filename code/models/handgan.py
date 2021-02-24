@@ -272,11 +272,13 @@ class HandGAN(pl.LightningModule):
             out = denorm(out)
 
         out = make_grid(out, nrow=nrow).permute(1, 2, 0).cpu()
-        self.trainer.logger.experiment.log_image(log_name=log_name, x=out)
+        if self.trainer.logger:
+            self.trainer.logger.experiment.log_image(log_name=log_name, x=out)
 
     def log_losses(self, losses):
-        for key, value in losses.items():
-            self.trainer.logger.experiment.log_metric(log_name='Loss '+key, x = value)
+        if self.trainer.logger:
+            for key, value in losses.items():
+                self.trainer.logger.experiment.log_metric(log_name='Loss '+key, x = value)
 
 class ValidationCallback(Callback):
     def on_validation_epoch_start(self, trainer, pl_module):
@@ -310,9 +312,10 @@ class TestCallback(Callback):
 
 class PrintModels(Callback):
     def setup(self, trainer, pl_module, stage):
-        # Log generators' and discriminators' model layers
-        for chunk in str(pl_module.g_ab).split('\n'):
-            trainer.logger.experiment.log_text('Generators_arch', str(chunk))
+        if trainer.logger:
+            # Log generators' and discriminators' model layers
+            for chunk in str(pl_module.g_ab).split('\n'):
+                trainer.logger.experiment.log_text('Generators_arch', str(chunk))
 
-        for chunk in str(pl_module.d_a).split('\n'):
-            trainer.logger.experiment.log_text('Discriminators_arch', str(chunk))
+            for chunk in str(pl_module.d_a).split('\n'):
+                trainer.logger.experiment.log_text('Discriminators_arch', str(chunk))
