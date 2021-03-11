@@ -59,7 +59,7 @@ class SynthHandsDataModule(pl.LightningDataModule):
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--sh_path', type=str, default='/src/datasets/synthhands', help='path to the SynthHands dataset root folder.')
+        parser.add_argument('--sh_path', type=str, default='/src/datasets/synth_hands', help='path to the SynthHands dataset root folder.')
         parser.add_argument('--sh_json', type=bool, default=False, help='if true: gather data paths of SynthHands dataset to a json file, pairing the rgb images with their respective masks.')
         parser.add_argument('--sh_mean_std', type=bool, default=False, help='if true: calculate the mean and standard deviation for the SynthHands dataset.')
         parser.add_argument('--sh_with_objects', type=bool, default=False)

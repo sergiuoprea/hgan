@@ -1,5 +1,6 @@
-pytorch-lightning==1.1.6
-scipy==1.6.0
+pytorch-lightning==1.2.3
+scipy==1.6.1
 torch-fidelity==0.2.0
 opencv-python==4.5.1.48
-neptune-client==0.5.0
+neptune-client==0.5.1
+imagesize==1.2.0

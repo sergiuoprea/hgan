@@ -54,7 +54,7 @@ class RealHandsDataModule(pl.LightningDataModule):
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--rh_path', type=str, default='/src/datasets/realhands', help='path to the RealHands dataset root folder.')
+        parser.add_argument('--rh_path', type=str, default='/src/datasets/real_hands', help='path to the RealHands dataset root folder.')
         parser.add_argument('--rh_json', type=bool, default=False, help='if true: gather data paths of RealHands dataset to a json file, pairing the rgb images with their respective masks.')
         parser.add_argument('--rh_mean_std', type=bool, default=False, help='if true: calculate the mean and standard deviation for the RealHands dataset.')
 
