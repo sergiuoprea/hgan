@@ -5,6 +5,7 @@ from time import sleep
 import numpy as np
 import cv2 as cv
 import tqdm as tqdm
+import multiprocessing as mp
 
 HELP_MSG = """
 The dataset can be downloaded from https://handtracker.mpi-inf.mpg.de/projects/GANeratedHands/GANeratedDataset.htm
@@ -109,28 +110,20 @@ def process_folder(path):
     Function used to process the segmentation masks of a given folder given its path.
     """
 
-    for dirpath, _, files in os.walk(os.path.join(path, "color")):
-        pbar = tqdm.tqdm(total=len(files))
-        files = sorted(files)
+    print("Processing folder %s ..." %(path))
 
+    for dirpath, _, files in os.walk(os.path.join(path, "color")):
         for filename in files:
             fname = os.path.join(dirpath, filename)
 
             if fname.endswith((".jpg", ".png")) and not fname.endswith("_fixed.png"):
                 get_mask(path, fname)
 
-            sleep(0.1)
-            pbar.update(1)
-
-        pbar.close()
-
-def process_dataset(folder_paths):
+def process_dataset(path):
     """
     Function used to preprocess the masks of RealHands dataset.
     """
-    for path in folder_paths:
-        print("Processing masks of folder %s..." %(os.path.basename(path)))
-        process_folder(path)
+    process_folder(path)
 
 if __name__ == '__main__':
 
@@ -151,4 +144,7 @@ if __name__ == '__main__':
                        for recording in sorted(os.listdir(OPT.data_dir))
                        if os.path.isdir(os.path.join(OPT.data_dir, recording))]
 
-    process_dataset(USER_RECORDINGS)
+    print(USER_RECORDINGS)
+    print("Using %d cores to preprocess the data." % mp.cpu_count())
+    pool = mp.Pool(mp.cpu_count())
+    pool.map(process_dataset, USER_RECORDINGS)
