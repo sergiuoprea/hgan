@@ -1,23 +1,19 @@
 <div align="center">    
  
-# HandGAN - The power of GANs in your Hands!   
+# HandGAN - The power of GANs in your Hands!
+(this readme is still under construction)
 
-[![Paper](http://img.shields.io/badge/paper-arxiv.1001.2234-B31B1B.svg)](https://arxiv.org/abs/2103.15017)
-[![Conference](https://img.shields.io/badge/-IJCNN-blue.svg)](https://papers.nips.cc/book/advances-in-neural-information-processing-systems-31-2018)
-<!--
-ARXIV   
-[![Paper](http://img.shields.io/badge/arxiv-math.co:1480.1111-B31B1B.svg)](https://www.nature.com/articles/nature14539)
--->
-![CI testing](https://github.com/sergiuoprea/lot_of_gans/workflows/CI%20testing/badge.svg?branch=master&event=push)
-
-
-<!--  
-Conference   
--->   
+[![Paper](http://img.shields.io/badge/preprint-arxiv.1001.2234-B31B1B.svg)](https://arxiv.org/abs/2103.15017)
+[![Conference](https://img.shields.io/badge/IJCNN-2021-blue.svg)](https://arxiv.org/abs/2103.15017)
+ 
 </div>
  
 ## Description   
-What it does   
+
+HandGAN (H-GAN) is a cycle-consistent adversarial approach designed to translate synthetic images of hands to the real domain. Synthetic hands provide complete ground-truth annotations, yet they do not approximate the underlying distribution of real images of hands. The goal is to brdige the gap between the synthetic and real domain at a distribution level. We strive to provide the perfect blend of a realistic hand appearance with precise synthetic annotations. H-GAN is able to translate synthetic hands so as they appearance shares similarities with images of hands from the real domain. It maintains the hand shape during the translation to ensure the correspondance with the ground-truth annotations.
+
+Feel free to use our HandGAN to level up your synthetic images of hands. Your deep learning-based models are data hungry, so you just need to feed them properly!
+
 
 ## How to run   
 First, install dependencies   
@@ -59,13 +55,25 @@ trainer.fit(model, train, val)
 # test using the best model!
 trainer.test(test_dataloaders=test)
 ```
+## Publication
+<div align="center">    
+[H-GAN: The power of GANs in your Hands](https://arxiv.org/abs/2103.15017) (preprint)
 
-### Citation   
+Sergiu Oprea, Giorgos Karvounas, Pablo Martínez-González, Nikolaos Kyriazis, Sergio Orts-Escolano, Iason Oikonomidis, Alberto García-García, Aggeliki Tsoli, José García-Rodríguez, and Antonis Argyros.
+</div>
+
+For any inquiries, please contact the corresponding author: Sergiu Oprea ([soprea@dtic.ua.es](mailto:soprea@dtic.ua.es)).
+
+This work was accepted for publication at the International Joint Conference on Neural Networks (IJCNN) 2021!
+
+### How to cite this work?
+If you use HandGAN, please cite:
 ```
-@article{YourName,
-  title={Your Title},
-  author={Your team},
-  journal={Location},
-  year={Year}
+@article{Oprea2021,
+  author    = {Sergiu Oprea and Giorgos Karvounas and Pablo Martinez{-}Gonzalez and Nikolaos Kyriazis and Sergio Orts{-}Escolano and Iason Oikonomidis and Alberto Garcia{-}Garcia and Aggeliki Tsoli and Jos{\'{e}} Garc{\'{\i}}a Rodr{\'{\i}}guez} and Antonis A. Argyros},
+  title     = {{H-GAN:} the power of GANs in your Hands},
+  journal   = {CoRR},
+  volume    = {abs/2103.15017},
+  year      = {2021}
 }
-```   
+```
