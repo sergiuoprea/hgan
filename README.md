@@ -5,13 +5,13 @@
 [![Paper](http://img.shields.io/badge/preprint-arxiv.1001.2234-B31B1B.svg)](https://arxiv.org/abs/2103.15017)
 [![Conference](https://img.shields.io/badge/IJCNN-2021-blue.svg)](https://arxiv.org/abs/2103.15017)
 
-![Architecture](assets/architecture.png)
+![Architecture](assets/architecture.svg)
  
 </div>
  
 ## Description   
 
-HandGAN (H-GAN) is a cycle-consistent adversarial approach designed to translate synthetic images of hands to the real domain. Synthetic hands provide complete ground-truth annotations, yet they do not approximate the underlying distribution of real images of hands. The goal is to brdige the gap between the synthetic and real domain at a distribution level. We strive to provide the perfect blend of a realistic hand appearance with precise synthetic annotations. H-GAN is able to translate synthetic hands so as they appearance shares similarities with images of hands from the real domain. It maintains the hand shape during the translation to ensure the correspondance with the ground-truth annotations.
+HandGAN (H-GAN) is a cycle-consistent adversarial approach designed to translate synthetic images of hands to the real domain. Synthetic hands provide complete ground-truth annotations, yet they do not approximate the underlying distribution of real images of hands. The goal is to bridge the gap between the synthetic and real domain at a distribution level. We strive to provide the perfect blend of a realistic hand appearance with precise synthetic annotations. H-GAN is able to translate synthetic hands so as they appearance shares similarities with images of hands from the real domain. It maintains the hand shape during the translation to ensure the correspondance with the ground-truth annotations.
 
 Feel free to use our HandGAN to level up your synthetic images of hands. Your deep learning-based models are data hungry, so you just need to feed them properly!
 
