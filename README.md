@@ -56,15 +56,15 @@ trainer.fit(model, train, val)
 trainer.test(test_dataloaders=test)
 ```
 ## Publication
-<div align="center">    
-[H-GAN: The power of GANs in your Hands](https://arxiv.org/abs/2103.15017) (preprint)
+<p align="center">
+ <a href="https://arxiv.org/abs/2103.15017"><b>H-GAN: The power of GANs in your Hands</b></a>
+ 
+ <small>International Joint Conference on Neural Networks (IJCNN) - 2021</small>
 
-Sergiu Oprea, Giorgos Karvounas, Pablo Martínez-González, Nikolaos Kyriazis, Sergio Orts-Escolano, Iason Oikonomidis, Alberto García-García, Aggeliki Tsoli, José García-Rodríguez, and Antonis Argyros.
-</div>
+ <em>Sergiu Oprea, Giorgos Karvounas, Pablo Martínez-González, Nikolaos Kyriazis, Sergio Orts-Escolano, Iason Oikonomidis, Alberto García-García, Aggeliki Tsoli, José García-Rodríguez, and Antonis Argyros</em>
+</p>
 
 For any inquiries, please contact the corresponding author: Sergiu Oprea ([soprea@dtic.ua.es](mailto:soprea@dtic.ua.es)).
-
-This work was accepted for publication at the International Joint Conference on Neural Networks (IJCNN) 2021!
 
 ### How to cite this work?
 If you use HandGAN, please cite:
