@@ -1,10 +1,11 @@
 <div align="center">    
  
 # HandGAN - The power of GANs in your Hands!
-(this documentation is still under construction)
 
 [![Paper](http://img.shields.io/badge/preprint-arxiv.1001.2234-B31B1B.svg)](https://arxiv.org/abs/2103.15017)
 [![Conference](https://img.shields.io/badge/IJCNN-2021-blue.svg)](https://arxiv.org/abs/2103.15017)
+
+![Architecture](assets/architecture.png)
  
 </div>
  
@@ -14,47 +15,26 @@ HandGAN (H-GAN) is a cycle-consistent adversarial approach designed to translate
 
 Feel free to use our HandGAN to level up your synthetic images of hands. Your deep learning-based models are data hungry, so you just need to feed them properly!
 
-
 ## How to run   
 First, install dependencies   
 ```bash
 # clone project   
-git clone https://github.com/YourGithubName/deep-learning-project-template
+git clone https://github.com/sergiuoprea/hgan.git
 
 # install project   
-cd deep-learning-project-template 
+cd hgan
 pip install -e .   
 pip install -r requirements.txt
  ```   
- Next, navigate to any file and run it.   
+ Next, navigate to the code folder.   
  ```bash
-# module folder
-cd project
+# code folder
+cd code
 
-# run module (example: mnist as your main contribution)   
-python lit_classifier_main.py    
+# run main.py 
+python main.py    
 ```
 
-## Imports
-This project is setup as a package which means you can now easily import any file into any other file like so:
-```python
-from project.datasets.mnist import mnist
-from project.lit_classifier_main import LitClassifier
-from pytorch_lightning import Trainer
-
-# model
-model = LitClassifier()
-
-# data
-train, val, test = mnist()
-
-# train
-trainer = Trainer()
-trainer.fit(model, train, val)
-
-# test using the best model!
-trainer.test(test_dataloaders=test)
-```
 ## Publication
 <div align="center">
 
@@ -65,8 +45,6 @@ trainer.test(test_dataloaders=test)
  *Sergiu Oprea, Giorgos Karvounas, Pablo Martínez-González, Nikolaos Kyriazis, Sergio Orts-Escolano, Iason Oikonomidis, Alberto García-García, Aggeliki Tsoli, José García-Rodríguez, and Antonis Argyros*
 
 </div>
-
-For any inquiries, please contact the corresponding author: Sergiu Oprea ([soprea@dtic.ua.es](mailto:soprea@dtic.ua.es)).
 
 ### How to cite this work?
 If you use HandGAN, please cite:
@@ -79,3 +57,5 @@ If you use HandGAN, please cite:
   year      = {2021}
 }
 ```
+
+For any inquiries, feel free to create an issue or contact Sergiu Oprea ([soprea@dtic.ua.es](mailto:soprea@dtic.ua.es)).
