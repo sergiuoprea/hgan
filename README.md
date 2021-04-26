@@ -1,7 +1,7 @@
 <div align="center">    
  
 # HandGAN - The power of GANs in your Hands!
-(this readme is still under construction)
+(this documentation is still under construction)
 
 [![Paper](http://img.shields.io/badge/preprint-arxiv.1001.2234-B31B1B.svg)](https://arxiv.org/abs/2103.15017)
 [![Conference](https://img.shields.io/badge/IJCNN-2021-blue.svg)](https://arxiv.org/abs/2103.15017)
@@ -56,13 +56,15 @@ trainer.fit(model, train, val)
 trainer.test(test_dataloaders=test)
 ```
 ## Publication
-<p align="center">
- <a href="https://arxiv.org/abs/2103.15017"><b>H-GAN: The power of GANs in your Hands</b></a>
- 
- <small>International Joint Conference on Neural Networks (IJCNN) - 2021</small>
+<div align="center">
 
- <em>Sergiu Oprea, Giorgos Karvounas, Pablo Martínez-González, Nikolaos Kyriazis, Sergio Orts-Escolano, Iason Oikonomidis, Alberto García-García, Aggeliki Tsoli, José García-Rodríguez, and Antonis Argyros</em>
-</p>
+ ### [**H-GAN: The power of GANs in your Hands**](https://arxiv.org/abs/2103.15017)
+ 
+ International Joint Conference on Neural Networks (IJCNN) - 2021
+ 
+ *Sergiu Oprea, Giorgos Karvounas, Pablo Martínez-González, Nikolaos Kyriazis, Sergio Orts-Escolano, Iason Oikonomidis, Alberto García-García, Aggeliki Tsoli, José García-Rodríguez, and Antonis Argyros*
+
+</div>
 
 For any inquiries, please contact the corresponding author: Sergiu Oprea ([soprea@dtic.ua.es](mailto:soprea@dtic.ua.es)).
 
