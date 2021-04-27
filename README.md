@@ -2,7 +2,7 @@
  
 # HandGAN - The power of GANs in your Hands!
 
-[![Paper](http://img.shields.io/badge/preprint-arxiv.1001.2234-B31B1B.svg)](https://arxiv.org/abs/2103.15017)
+[![Paper](http://img.shields.io/badge/preprint-arxiv.2103.15017-B31B1B.svg)](https://arxiv.org/abs/2103.15017)
 [![Conference](https://img.shields.io/badge/IJCNN-2021-blue.svg)](https://arxiv.org/abs/2103.15017)
 
 <img src="assets/architecture.svg">
